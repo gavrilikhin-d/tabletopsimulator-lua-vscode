@@ -1,50 +1,39 @@
-/**
- * @file TTSService
- * This file is the entry point for the TTS Service. It is responsible for:
- * - Registering listeners which are event driven functions incoming from the game
- * The class is a Singleton, so no matter where it is imported, it will always be the same instance.
- */
+import * as vscode from 'vscode'
 
-import { Disposable } from 'vscode'
 import EditorApi from './CustomExternalEditorApi'
-import listeners from './eventManager'
+import listeners from './listeners'
+import { prompts } from '@/vscode/windowManager'
 
-export default class TTSService {
-  // Singleton Pattern
-  private static instance: TTSService
-  // Guardrail to prevent disposables mismanagement
-  private ready: boolean = false
-  // API to communicate with the game
-  private readonly api: EditorApi
-  // Listeners to be disposed when the service is closed
-  private readonly disposables: Disposable[]
+export default class TTSService extends vscode.Disposable {
+  public static api = new EditorApi()
+  private static readonly _disposables: vscode.Disposable[] = []
 
-  // Register listeners and create the API
-  private constructor () {
-    this.api = new EditorApi()
-    this.disposables = listeners.map(l => new Disposable(this.api.on(l.eventName, l.handler)))
-    this.disposables.push(new Disposable(() => {
-      this.disposables.forEach(d => d.dispose())
-      this.api.close()
-      console.log('TTSService Resources Freed')
-    }))
+  public static async start (): Promise<void> {
+    // Register all listeners with corresponding callbacks, make sure we can dispose them later
+    listeners.forEach(listener => {
+      this._disposables.push(
+        new vscode.Disposable(
+          TTSService.api.on(listener.eventname, listener.callback)
+        )
+      )
+    })
+    // Start listening for incoming events
+    await TTSService.api.listen()
   }
 
-  // Singleton Pattern and Guardrail
-  public static getInstance (): TTSService {
-    if (TTSService.instance === undefined) TTSService.instance = new TTSService()
-    else if (!TTSService.instance.ready) throw new Error('TTSService is not ready yet')
-    return TTSService.instance
+  public static async getScripts (): Promise<void> {
+    if (!await prompts.getScriptsConfirmed()) return
+    const { savePath } = await TTSService.api.getLuaScripts()
+    console.log('[TTSLua] Save path:', savePath)
   }
 
-  // Open the service and return the disposables
-  public async open (): Promise<Disposable[]> {
-    await this.api.listen()
-    this.ready = true
-    return this.disposables
+  public static saveAndPlay (): void {
+    console.log('[TTSLua] Save and Play')
   }
 
-  public static getApi (): EditorApi {
-    return TTSService.getInstance().api
+  public static dispose (): void {
+    TTSService._disposables.forEach(d => d.dispose())
+    TTSService.api.close()
+    console.log('[TTSLua] Adapter resources disposed')
   }
 }

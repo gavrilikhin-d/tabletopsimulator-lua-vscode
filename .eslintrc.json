@@ -3,7 +3,7 @@
 	"parserOptions": {
 		"ecmaVersion": 6,
 		"sourceType": "module",
-		"project": "../tsconfig.json"
+		"project": "./tsconfig.json"
 	},
 	"env": {
 		"node": true
@@ -17,12 +17,6 @@
 		"eqeqeq": "error",
 		"indent": "off",
 		"@typescript-eslint/indent": ["warn", 2, { "SwitchCase": 1 } ],
-		"max-len": ["warn", {
-      "code": 100,
-      "ignoreComments": true,
-      "ignoreUrls": true,
-      "ignoreStrings": true,
-      "ignoreTemplateLiterals": true
-    }]
+		"max-len": ["warn", { "code": 120, "ignoreComments": true, "ignoreUrls": true }]
 	}
 }

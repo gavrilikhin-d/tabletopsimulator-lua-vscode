@@ -9,19 +9,12 @@
 			"runtimeExecutable": "${execPath}",
 			"args": [
         "--extensionDevelopmentPath=${workspaceFolder}",
-        "--profile=Ext Dev",
-        "${workspaceFolder}/tests/fixtures/repo"
+        "--profile='Ext Dev'"
       ],
 			"autoAttachChildProcesses": true,
 			"sourceMaps": true,
-			"outFiles": [
-        "${workspaceFolder}/dist/**/*.js"
-      ],
-			"preLaunchTask": "npm: watch",
-      "skipFiles": [
-        "<node_internals>/**",
-        "${workspaceFolder}/node_modules/**/*.js"
-      ]
+			"outFiles": ["${workspaceFolder}/out/**/*.js"],
+			"preLaunchTask": "npm: watch"
 		},
     {
 			"name": "Extension Tests",

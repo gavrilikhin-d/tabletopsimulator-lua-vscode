@@ -2,25 +2,23 @@
   "compilerOptions": {
     "module": "commonjs",
     "target": "ES2020",
-    "outDir": "dist",
-    "lib": ["ES2020", "dom"],
+    "outDir": "out",
+    "lib": ["ES2020"],
     "sourceMap": true,
     "esModuleInterop": true, // Emittery from @matanlurey/tts-editor requires this.
     "rootDirs": ["src", "server"],
     "strict": true,
     "noImplicitAny": true,
     "noImplicitReturns": true,
-    "noUnusedLocals": false,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
     "forceConsistentCasingInFileNames": true,
     "incremental": true,
     "resolveJsonModule": true,
     "baseUrl": "./",
     "paths": {
-      "@/*": ["src/*"]
-    }
-  },
-  "include": [
-    "src/**/*", "assets/web/console.js",
-    // "server/**/*"
-  ],
+      "@/*": ["src/*"],
+      "Utilities/*": ["src/lib/utils/*"],
+    },
+  }
 }

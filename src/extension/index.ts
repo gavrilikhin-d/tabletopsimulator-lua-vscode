@@ -1,50 +1,54 @@
-/**
- * @file Extension Entry Point
- * This is the extension entry point, when the extension is loaded by VS Code. It calls the
- * `activate` function and passes the extension context.
- *
- * In order:
- * 1. Set the storage
- * 2. Init the workspace
- * 3. Init the TTS Service
- * 4. Register the commands
- * 5. Register completion providers
- */
-
-import { type ExtensionContext, commands, window } from 'vscode'
-
-import myCommands from './commands'
-import TTSService from '@/TTSService'
-import * as state from '@/utils/LocalStorageService'
-import { initWorkspace } from '@/vscode/workspaceManager'
-import registerProviders from '@/providers'
-import L from '@/i18n'
-import TTSConsolePanel from '@/TTSConsole'
+import * as path from 'path'
+import { type ExtensionContext, window as Window, commands as vsCommands } from 'vscode'
+import {
+  RevealOutputChannelOn, LanguageClient, TransportKind,
+  type ServerOptions, type LanguageClientOptions
+} from 'vscode-languageclient/node'
+import TTSService from '../TTSService'
+import commands from './commands'
 
 export async function activate (context: ExtensionContext): Promise<void> {
-  // L is the i18n object, which is used to get localized strings
-  console.info(L.activation())
+  console.log('[TTSLua] Activating extension')
+  const serverModule = context.asAbsolutePath(path.join('out', 'server.bundle.js'))
+  console.log(serverModule)
+  const serverOptions: ServerOptions = {
+    run: { module: serverModule, transport: TransportKind.ipc, options: { cwd: process.cwd() } },
+    debug: { module: serverModule, transport: TransportKind.ipc, options: { cwd: process.cwd() } }
+  }
 
-  // Storage is a persistent storage the extension uses for settings and state across sessions
-  state.setStorageRef(context.globalState, context.globalStorageUri)
-  await state.set('extensionPath', context.extensionPath)
-
-  // All of these must return disposable objects, which will unload along with the extension
-  context.subscriptions.push(
-    await initWorkspace(),
-    ...await TTSService.getInstance().open(),
-    ...myCommands.map(cmd => commands.registerCommand(cmd.id, cmd.fn, context)),
-    ...registerProviders()
-  )
-
-  // Register the TTS Console Serializer
-  window.registerWebviewPanelSerializer(
-    L.TTSConsole.viewType() as string,
-    {
-      async deserializeWebviewPanel (webviewPanel, state) {
-        TTSConsolePanel.revive(webviewPanel, state)
+  const clientOptions: LanguageClientOptions = {
+    documentSelector: [{ scheme: 'file', language: 'plaintext' }],
+    diagnosticCollectionName: 'sample',
+    revealOutputChannelOn: RevealOutputChannelOn.Never,
+    progressOnInitialization: true,
+    middleware: {
+      executeCommand: async (command, args, next) => {
+        const selected = await Window.showQuickPick(['Visual Studio', 'Visual Studio Code'])
+        if (selected === undefined) {
+          return next(command, args)
+        }
+        args = args.slice(0)
+        args.push(selected)
+        return next(command, args)
       }
     }
+  }
+
+  let client: LanguageClient
+  try {
+    client = new LanguageClient('UI Sample', serverOptions, clientOptions)
+  } catch (err) {
+    await Window.showErrorMessage('The extension couldn\'t be started. See the output channel for details.')
+    return
+  }
+  client.registerProposedFeatures()
+  await client.start()
+
+  console.log('[TTSLua] Tabletop Simulator Extension Load')
+  await TTSService.start()
+
+  context.subscriptions.push(
+    ...commands.map(cmd => vsCommands.registerCommand(cmd.id, cmd.fn, context))
   )
 }
 

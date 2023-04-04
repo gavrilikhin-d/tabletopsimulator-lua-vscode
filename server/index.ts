@@ -1,7 +1,8 @@
-/** UNUSED
- * @file Sample server
- * This file contains a sample server that can be used to test the language client
- */
+/* --------------------------------------------------------------------------------------------
+ * Copyright (c) Microsoft Corporation. All rights reserved.
+ * Licensed under the MIT License. See License.txt in the project root for license information.
+ * ------------------------------------------------------------------------------------------ */
+'use strict'
 
 import {
   CodeAction, CodeActionKind, Command, createConnection, Diagnostic, DiagnosticSeverity, Position,
@@ -18,18 +19,14 @@ documents.listen(connection)
 connection.onInitialize(() => {
   return {
     capabilities: {
-      completionProvider: {
-        resolveProvider: true,
-        triggerCharacters: ['.', ':']
+      codeActionProvider: true,
+      textDocumentSync: {
+        openClose: true,
+        change: TextDocumentSyncKind.Incremental
+      },
+      executeCommandProvider: {
+        commands: ['sample.fixMe']
       }
-      // codeActionProvider: true,
-      // textDocumentSync: {
-      //   openClose: true,
-      //   change: TextDocumentSyncKind.Incremental
-      // },
-      // executeCommandProvider: {
-      //   commands: ['sample.fixMe']
-      // }
     }
   }
 })
@@ -61,7 +58,7 @@ connection.onCodeAction((params: any) => {
   return [CodeAction.create(title, Command.create(title, 'sample.fixMe', textDocument.uri), CodeActionKind.QuickFix)]
 })
 
-connection.onExecuteCommand(async (params: any) => {
+connection.onExecuteCommand(async (params:any) => {
   if (params.command !== 'sample.fixMe' || params.arguments === undefined) {
     return
   }

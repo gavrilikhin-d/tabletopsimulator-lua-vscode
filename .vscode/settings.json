@@ -1,10 +1,10 @@
 // Place your settings in this file to overwrite default and user settings.
 {
 	"files.exclude": {
-		"dist": false
+		"out": false
 	},
 	"search.exclude": {
-		"dist": true,
+		"out": true,
 		"server": true
 	},
 	"files.trimTrailingWhitespace": true,
@@ -17,7 +17,7 @@
 		"typescript"
 	],
 	"editor.codeActionsOnSave": {
-		"source.fixAll.eslint": "explicit"
+		"source.fixAll.eslint": true
 	},
 	"eslint.workingDirectories": [
 		"./src",
