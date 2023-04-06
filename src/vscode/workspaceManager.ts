@@ -1,19 +1,11 @@
-/**
- * @file Workspace Manager
- * This file contains the workspace manager. It is used to manage the workspace directory.
- * The workspace directory is the directory where all the files are written to.
- * By default this is the OS's temporary directory.
- * This can be changed by the user when clicking the status bar item.
- */
-
 import { tmpdir } from 'os'
-import { basename, join } from 'path'
+import { join } from 'path'
 import {
   Uri, window, StatusBarAlignment, workspace, env,
   type WorkspaceFoldersChangeEvent,
   type WorkspaceFolder, Disposable
 } from 'vscode'
-import * as LSS from '@/utils/LocalStorageService'
+import * as LSS from '@Utils/LocalStorageService'
 import { changeTheme, createStatusBarItem } from './statusBarManager'
 import L from '@/i18n'
 import { workDirCreateFailed } from './errorHandler'
@@ -25,29 +17,23 @@ const statusBarItem = createStatusBarItem({
   command: 'ttslua.changeWorkDir',
   tooltip: L.workDir.hover()
 })
-const defaultWorkDirUri = Uri.file(defaultWorkDir)
-let currentWorkDirUri = defaultWorkDirUri
+let workDirUri = Uri.file(defaultWorkDir)
+
 /**
  * @returns True if currently selected workDir is the default workDir
  */
-export function isWorkdirDefault (): boolean {
-  return currentWorkDirUri.fsPath.localeCompare(defaultWorkDir, undefined, {
+function isDefault (): boolean {
+  return workDirUri.fsPath.localeCompare(defaultWorkDir, undefined, {
     sensitivity: 'accent'
   }) === 0
 }
 
 /**
- * This function will return the current workDir as URI
- * @returns The current workDir
- */
-export function getWorkDir (): Uri { return currentWorkDirUri }
-
-/**
  * Calling this function will reset the workDir to the default workDir
  */
 function reset (): void {
-  currentWorkDirUri = defaultWorkDirUri
-  void LSS.set('workDir', defaultWorkDirUri.fsPath)
+  workDirUri = Uri.file(defaultWorkDir)
+  void LSS.set('workDir', workDirUri.fsPath)
   statusBarItem.text = `$(root-folder) TTS [${L.workDir.defaultTag()}]`
 }
 
@@ -84,12 +70,11 @@ async function updateStatusBar (_e?: WorkspaceFoldersChangeEvent): Promise<void>
   // Get all git repos in workspace
   const gitFolders = await getGitFolders()
   // Get currently selected workspace folder Uri
-  const folder = workspace.getWorkspaceFolder(Uri.file(currentWorkDirUri.fsPath))
+  const folder = workspace.getWorkspaceFolder(Uri.file(workDirUri.fsPath))
   // Update Status bar accordingly
-  statusBarItem.text = `$(root-folder) ${
-    !isWorkdirDefault() ? folder?.name ?? L.workDir.removedTag() : L.workDir.defaultTag()
-  }`
-  const _isDefault = isWorkdirDefault()
+  const dfault = L.workDir.defaultTag()
+  statusBarItem.text = `$(root-folder) TTS [${!isDefault() ? folder?.name ?? dfault : dfault}]`
+  const _isDefault = isDefault()
   switch (true) {
     case gitFolders.length > 0 && !_isDefault:
       changeTheme(statusBarItem, 'default')
@@ -97,11 +82,7 @@ async function updateStatusBar (_e?: WorkspaceFoldersChangeEvent): Promise<void>
     case gitFolders.length > 0 && _isDefault:
       changeTheme(statusBarItem, 'error')
       break
-    case gitFolders.length === 0 && folder === undefined:
-      changeTheme(statusBarItem, 'error')
-      statusBarItem.tooltip = L.workDir.removed()
-      break
-    case gitFolders.length === 0 && folder !== undefined:
+    case gitFolders.length === 0:
       changeTheme(statusBarItem, 'warning')
       break
   }
@@ -115,66 +96,43 @@ async function updateStatusBar (_e?: WorkspaceFoldersChangeEvent): Promise<void>
  */
 export async function initWorkspace (): Promise<Disposable> {
   // Check if workDir is set in localStorage
-  currentWorkDirUri = Uri.file(LSS.querySet('workDir', defaultWorkDir))
+  workDirUri = Uri.file(LSS.querySet('workDir', defaultWorkDir))
   // Check if the workDir is currently opened in the workspace
   // If not, return to default
   if (workspace.workspaceFolders?.some(
-    folder => folder.uri.fsPath === currentWorkDirUri.fsPath
+    folder => folder.uri.fsPath === workDirUri.fsPath
   ) === false) reset()
   // Check if Temp folder exists, if not create it
-  if (isWorkdirDefault()) {
-    await Promise.resolve(
-      workspace.fs.createDirectory(defaultWorkDirUri)
-    ).catch(workDirCreateFailed)
-  }
+  if (isDefault()) await Promise.resolve(workspace.fs.createDirectory(workDirUri)).catch(workDirCreateFailed)
   // Update on new workspaces
   workspace.onDidChangeWorkspaceFolders(updateStatusBar)
   void updateStatusBar()
-  return new Disposable(statusBarItem.dispose.bind(statusBarItem))
+  return new Disposable(statusBarItem.dispose)
 }
 
 /**
  * This command will prompt the user for a new workDir to be used
  */
 export async function changeWorkDir (): Promise<void> {
-  const workspaceFolders = workspace.workspaceFolders ?? []
-  const browseOption = '$(folder-opened) Browse for directory...'
-  const defaultOption = `$(refresh) ${L.workDir.defaultTag()}`
-  // If there are no workspace folders available
-  if (workspaceFolders.length === 0) {
+  const gitFolders = await getGitFolders()
+  // If there are no git repos detected
+  if (gitFolders.length === 0) {
     // If workDir is not default, reset it
-    if (!isWorkdirDefault()) { reset(); return }
+    if (!isDefault()) { reset(); return }
     // If workDir is default, show error message
     void window.showErrorMessage(L.workDir.noGitReposInWorkspace(), L.docs.learnMore())
       .then(res => {
-        if (res === L.docs.learnMore()) {
-          void env.openExternal(Uri.parse(L.urls.versionControl()))
-        }
+        if (res === L.docs.learnMore()) { void env.openExternal(Uri.parse(L.docs.urls.versionControl())) }
       }); return
   }
-  // Prompt for which workspace folder to use
+  // If git repos are detected prompt for which one to use
   const selection = await window.showQuickPick(
-    [...workspaceFolders.map(folder => folder.uri.fsPath), browseOption, defaultOption],
+    [...gitFolders.map(d => d.uri.fsPath), `$(refresh) ${L.workDir.defaultTag()}`],
     { placeHolder: L.workDir.quickPickPlaceHolder() }
   )
   // Handle Cancel
   if (selection === undefined) return
-  if (selection === browseOption) {
-    const newDir = await window.showOpenDialog({
-      canSelectFiles: false,
-      canSelectFolders: true,
-      canSelectMany: false,
-      openLabel: 'Select Working Directory'
-    })
-    if (newDir === undefined || newDir.length === 0) return
-    const selectedUri = newDir[0]
-    if (!isPresentInWorkspace(selectedUri)) {
-      await addDir(selectedUri.fsPath)
-    }
-    void LSS.set('workDir', selectedUri.fsPath)
-    currentWorkDirUri = selectedUri
-    statusBarItem.text = `$(root-folder) TTS [${basename(selectedUri.fsPath)}]`
-  } else if (selection !== defaultOption) {
+  if (selection !== `$(refresh) ${L.workDir.defaultTag()}`) {
     // Any selection but default
     const newWorkDir = workspace.getWorkspaceFolder(Uri.file(selection))
     if (newWorkDir === undefined) {
@@ -182,7 +140,7 @@ export async function changeWorkDir (): Promise<void> {
       return
     }
     void LSS.set('workDir', newWorkDir.uri.fsPath)
-    currentWorkDirUri = newWorkDir.uri
+    workDirUri = newWorkDir.uri
     statusBarItem.text = `$(root-folder) TTS [${newWorkDir.name}]`
   } else reset()
   void updateStatusBar()
@@ -195,27 +153,15 @@ export async function changeWorkDir (): Promise<void> {
  */
 export async function readFile (filename: string): Promise<Uint8Array> {
   return await Promise.resolve(workspace.fs.readFile(
-    Uri.file(join(currentWorkDirUri.fsPath, filename))
+    Uri.file(join(workDirUri.fsPath, filename))
   ))
 }
 
-export async function addDefaultWorkDir (): Promise<void> {
-  await addDir(defaultWorkDirUri.fsPath, L.explorer.defaultWorkDirName())
-}
-
-export async function addDir (dir: string, name?: string): Promise<void> {
-  const uri = Uri.file(dir)
-  const vsFolders = workspace.workspaceFolders
-  workspace.updateWorkspaceFolders(vsFolders?.length ?? 0, null, {
-    uri,
-    name: name ?? basename(uri.fsPath)
-  })
-}
-
-export function isPresentInWorkspace (dirUri: Uri): boolean {
-  const vsFolders = workspace.workspaceFolders
-  // If there are no folders in the workspace,
-  // OR the requested dir in the workspace do not match any vscode folders path...
-  return (vsFolders !== undefined) &&
-    vsFolders.findIndex(vsDir => vsDir.uri.fsPath === dirUri.fsPath) !== -1
+/**
+ * Returns a URI of the filename in the workdir
+ * @param filename
+ * @returns Uri of the file
+ */
+export function getFileUri (filename: string): Uri {
+  return Uri.file(join(workDirUri.fsPath, filename))
 }

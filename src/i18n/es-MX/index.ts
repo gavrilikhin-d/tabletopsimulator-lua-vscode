@@ -1,9 +1,9 @@
 import enUS from '../en-US'
-import { extendDictionary } from '../i18n-util'
+import type { Translation } from '../i18n-types'
 
-const { urls } = enUS
+const { urls } = enUS.docs
 
-const esMX = extendDictionary(enUS, {
+const esMX = {
   // this is an example Translation, just rename or delete this folder if you want
   activation: '[TTSLua] Activando extension',
   workDir: {
@@ -15,8 +15,9 @@ const esMX = extendDictionary(enUS, {
     failedToSelect: 'Error al seleccionar el directorio de trabajo, porfavor intenta de nuevo'
   },
   docs: {
-    learnMore: 'Ver mas'
+    learnMore: 'Ver mas',
+    urls
   }
-})
+} satisfies Translation
 
 export default esMX

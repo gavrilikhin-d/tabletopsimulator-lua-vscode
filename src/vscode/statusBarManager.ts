@@ -1,8 +1,3 @@
-/**
- * @file Status Bar Manager
- * This file contains functions to create and manage status bar items
- */
-
 import { type StatusBarItem, StatusBarAlignment, window, MarkdownString, ThemeColor } from 'vscode'
 
 /**
@@ -30,9 +25,4 @@ export function changeTheme (item: StatusBarItem, theme: 'default' | 'error' | '
   item.backgroundColor = new ThemeColor(`statusBarItem.${theme}Background`)
   item.color = new ThemeColor(`statusBarItem.${theme}Foreground`)
   item.show()
-}
-
-export function quickStatus (message: string, timeout = 1500): void {
-  const statusBar = window.setStatusBarMessage(message)
-  setTimeout(() => statusBar.dispose(), timeout)
 }
