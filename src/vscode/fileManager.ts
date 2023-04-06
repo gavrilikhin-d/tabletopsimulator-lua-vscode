@@ -1,24 +1,15 @@
-/**
- * @file File Manager
- * This class is used to manage files. It's used to write files, check if they exist, and more.
- * By default it uses the workspace directory as the root directory.
- * This can be changed by passing `false` to the `fromWorkDir` parameter in the constructor.
- */
-
 import { normalize, join, dirname } from 'path'
-import { Uri, workspace, window, type TextEditor, Position } from 'vscode'
+import { Uri, workspace, window, type TextEditor } from 'vscode'
 import { getWorkDir } from './workspaceManager'
-import uriExists from '@/utils/uriExists'
+import uriExists from '@Utils/uriExists'
 
-export default class FileManager {
+export class FileManager {
   private readonly FileUri: Uri
 
-  public constructor (public filename: string | Uri, fromWorkDir = true) {
-    if (typeof filename === 'string') {
-      this.FileUri = fromWorkDir
-        ? Uri.file(normalize(join(getWorkDir().fsPath, filename)))
-        : Uri.file(normalize(filename))
-    } else this.FileUri = filename
+  public constructor (public filename: string, fromWorkDir = true) {
+    this.FileUri = fromWorkDir
+      ? Uri.file(normalize(join(getWorkDir().fsPath, filename)))
+      : Uri.file(normalize(filename))
   }
 
   public async write (text: string): Promise<void> {
@@ -32,33 +23,8 @@ export default class FileManager {
     return (await Promise.resolve(workspace.fs.readFile(this.FileUri))).toString()
   }
 
-  public async show ({ preserveFocus = true, preview = false } = {}): Promise<TextEditor> {
+  public async open ({ preserveFocus = true, preview = false } = {}): Promise<TextEditor> {
     return await Promise.resolve(window.showTextDocument(this.FileUri, { preserveFocus, preview }))
-  }
-
-  /**
-   * Open will create a new file with the given content and open it in the editor.
-   * @param content The content to write to the file
-   * @param options Options for the editor
-   * @returns
-   */
-  public async open (
-    content: string,
-    {
-      preserveFocus = true,
-      preview = false
-    } = {}
-  ): Promise<TextEditor> {
-    const doc = await workspace.openTextDocument(this.FileUri.with({ scheme: 'untitled' }))
-    const editor = await window.showTextDocument(doc, { preserveFocus, preview })
-    await editor.edit((edit) => {
-      edit.insert(new Position(0, 0), content)
-    })
-    return editor
-  }
-
-  public async erase (): Promise<void> {
-    await Promise.resolve(workspace.fs.delete(this.FileUri))
   }
 
   public getUri (): Uri { return this.FileUri }
