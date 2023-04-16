@@ -1,13 +1,13 @@
-import getConfig from '@/utils/getConfig'
+import getConfig from '@utils/getConfig'
 import {
   type CompletionItem, type CompletionList, type Position, type TextDocument,
   type CompletionItemProvider
 } from 'vscode'
 import { type LineToken, hs } from '..'
-import * as LSS from '@/utils/LocalStorageService'
-import FileManager from '@/vscode/fileManager'
+import * as LSS from '@utils/LocalStorageService'
+import { FileManager } from '@/vscode/fileManager'
 import { join } from 'path'
-import { XMLCompletion, type XMLAPI } from '.'
+import { XMLCompletion } from '.'
 
 export default class XMLCompletionProvider implements CompletionItemProvider {
   private xmlCompletion: XMLCompletion | undefined
@@ -15,8 +15,8 @@ export default class XMLCompletionProvider implements CompletionItemProvider {
   public async preload (): Promise<void> {
     const extPath = LSS.get<string>('extensionPath')
     if (extPath === undefined) return
-    const apiFs = new FileManager(join(extPath, 'assets/apis/userInterface.json'), false)
-    const api = JSON.parse(await apiFs.read()) as XMLAPI
+    const apiFs = new FileManager(join(extPath, 'apis/userInterface.json'), false)
+    const api = JSON.parse(await apiFs.read())
     this.xmlCompletion = new XMLCompletion(api)
   }
 
