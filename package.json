@@ -87,8 +87,8 @@
           ".tso"
         ],
         "icon": {
-          "light": "media/tts.svg",
-          "dark": "media/tts.svg"
+          "light": "assets/meedia/tts.svg",
+          "dark": "assets/meedia/tts.svg"
         }
       }
     ],
@@ -104,8 +104,8 @@
         "command": "ttslua.changeObjectView",
         "title": "Toggle TTS view between Lua/XML/Json",
         "icon": {
-          "light": "media/arrow-switch_light.svg",
-          "dark": "media/arrow-switch.svg"
+          "light": "assets/meedia/arrow-switch_light.svg",
+          "dark": "assets/meedia/arrow-switch.svg"
         }
       },
       {
