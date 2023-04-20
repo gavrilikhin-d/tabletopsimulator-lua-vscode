@@ -6,7 +6,7 @@
  * Or file-based storage, with read, write and erase functions.
  */
 
-import FileManager from '@/vscode/fileManager'
+import { FileManager } from '@/vscode/fileManager'
 import { Uri, type Memento } from 'vscode'
 
 let kvStorage: Memento | undefined
@@ -16,7 +16,7 @@ let storageUri: Uri | undefined
  * Sets the storage to be used by the service
  * @param newStorage The storage to be used by the service
  */
-export function setStorageRef (KVStorage: Memento, GlobalStorageUri: Uri): void {
+export function setStorage (KVStorage: Memento, GlobalStorageUri: Uri): void {
   kvStorage = KVStorage
   storageUri = GlobalStorageUri
   // console.log('Storage Uri: ' + storageUri.fsPath)
