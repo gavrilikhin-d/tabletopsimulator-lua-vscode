@@ -1,37 +1,55 @@
 import { handleNoSavePathStored, handleWorkDirNotPresent } from '@/vscode/errorHandler'
 import { getWorkDir, isPresentInWorkspace } from '@/vscode/workspaceManager'
 import * as LSS from '@/utils/LocalStorageService'
-import FileManager from '@/vscode/fileManager'
+import { FileManager } from '@/vscode/fileManager'
 import TTSService from '@/TTSService'
-import { type SaveFile, embedSave } from '@tts-tools/savefile'
-import docsFolder from '@/utils/docsFolder'
-import normalizeTtsSavePath from '@/utils/normalizeTtsSavePath'
-import { type OutgoingJsonObject } from '@matanlurey/tts-editor'
+import { embedSave } from '@tts-tools/savefile'
+import saveFileToAPI from '@/utils/saveFileToAPI'
 
 export default async function saveAndPlay (): Promise<void> {
   // When sending scripts, the workdir must be present in workspace
   if (!isPresentInWorkspace(getWorkDir())) { handleWorkDirNotPresent(); return }
-  // Retrieve the save path we stored when loading the game
-  const rawSavePath = LSS.get<string>('lastSavePath')
-  if (rawSavePath === undefined) { handleNoSavePathStored(); return }
-  const saveFs = new FileManager(normalizeTtsSavePath(rawSavePath), false)
-  let saveFile: SaveFile
-  try {
-    saveFile = embedSave(getWorkDir().fsPath, {
-      includePath: [
-        getWorkDir().fsPath,
-        docsFolder
-      ]
-    })
-  } catch (e) {
-    console.error(e)
-    throw new Error('Failed to embed save')
-  }
+  const savePath = LSS.get<string>('lastSavePath')
+  if (savePath === undefined) { handleNoSavePathStored(); return }
+  const saveFs = new FileManager(savePath, false)
+  const saveFile = embedSave(getWorkDir().fsPath, {
+    scriptExtension: 'lua',
+    includePaths: [
+      getWorkDir().fsPath
+    ]
+  })
   await saveFs.write(JSON.stringify(saveFile, null, 2))
-  const OutgoingObjects: OutgoingJsonObject[] = saveFile.ObjectStates.map(obj =>
-    ({ guid: obj.GUID, script: obj.LuaScript, ui: obj.XmlUI })
-  )
-  // Don't forget the global script :)
-  OutgoingObjects.push({ guid: '-1', script: saveFile.LuaScript, ui: saveFile.XmlUI })
-  await TTSService.getApi().saveAndPlay(OutgoingObjects)
+
+  await TTSService.getApi().saveAndPlay(saveFileToAPI(saveFile))
+
+  // const res = await TTSService.getApi().getLuaScripts()
+  // await TTSService.getApi().saveAndPlay(res.scriptStates)
+  console.log('saveAndPlay done')
+  // const gameObjects = await readFiles()
+  // if (isWorkdirDefault()) {
+  //   // If it's default, we just then send
+  // } else {
+  //   // If it's not default, we need to read the savegame and modify it
+  //   const savePath = LSS.get<string>('lastSavePath')
+  //   if (savePath === undefined) { handleNoSavePathStored(); return }
+  //   const saveMgr = new FileManager(savePath, false)
+  //   // Reform savegame
+  //   const savegame = await readSettings()
+  //   savegame.ObjectStates = []
+  //   for (const obj of gameObjects) {
+  //     // TODO: objectProps
+  //     const base = parse(obj.objectProps) // this should have ContainedObjects already
+  //     base.XmlUI = obj.ui
+  //     base.LuaScript = obj.script
+  //     base.GUID = obj.guid
+  //     savegame.ObjectStates.push(base)
+  //   }
+  //   // write to disk
+  //   await saveMgr.write(JSON.stringify(savegame, null, 2))
+  //   // send reload command to game
+  //   // REVIEW: Do we really need to get Lua scripts?
+  //   const res = await TTSService.getApi().getLuaScripts()
+  //   await TTSService.getApi().saveAndPlay(res.scriptStates)
+  //   console.log('saveAndPlay done')
+  // }
 }

@@ -10,15 +10,15 @@ import docsFolder from '@/utils/docsFolder'
 export async function installConsole (extensionPath: string): Promise<void> {
   const files = [
     {
-      src: join(extensionPath, 'assets', 'scripts', 'Console', 'console.lua'),
+      src: join(extensionPath, 'scripts', 'Console', 'console.lua'),
       dst: join(docsFolder, 'Console', 'console.lua')
     },
     {
-      src: join(extensionPath, 'assets', 'scripts', 'Console', 'console++.lua'),
+      src: join(extensionPath, 'scripts', 'Console', 'console++.lua'),
       dst: join(docsFolder, 'Console', 'console++.lua')
     },
     {
-      src: join(extensionPath, 'assets', 'scripts', 'vscode', 'console.lua'),
+      src: join(extensionPath, 'scripts', 'vscode', 'console.lua'),
       dst: join(docsFolder, 'vscode', 'console.lua')
     }
   ]
