@@ -1,11 +1,9 @@
-name: Dev Build
+name: Compile Dev Branch to VSIX
 
 # The workflow will trigger only when changes are pushed to the 'dev' branch
 on:
   push:
     branches: [ dev ]
-    paths:
-      - "src/**"
 
 jobs:
   Compile-VSIX:
@@ -34,11 +32,3 @@ jobs:
         with:
           name: ttslua-dev-${{ steps.vars.outputs.sha_short }}
           path: '*.vsix'
-      - name: Update Pre-Release
-        uses: softprops/action-gh-release@v1
-        with:
-          prerelease: true
-          files: '*.vsix'
-          name: 'Development Build'
-          body: 'This is a development build. It may contain bugs and incomplete features. Use at your own risk.'
-          generate_release_notes: true
