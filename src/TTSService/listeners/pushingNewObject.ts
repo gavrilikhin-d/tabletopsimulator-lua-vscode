@@ -9,6 +9,6 @@ import { type TextEditor } from 'vscode'
  * @returns A promise that resolves when the script is opened
  */
 export default async ({ scriptStates: [pushedObj] }: PushingNewObject): Promise<TextEditor> => {
-  const objFs = new FileManager(getDirectoryName(pushedObj) + '/Script.lua')
+  const objFs = new FileManager(getDirectoryName(pushedObj) + '/Script.ttslua')
   return await objFs.open(pushedObj.script, { preview: true, preserveFocus: false })
 }

@@ -65,6 +65,11 @@
     "onLanguage:lua"
   ],
   "contributes": {
+    "configurationDefaults": {
+      "files.associations": {
+        "*.ttslua": "lua"
+      }
+    },
     "commands": [
       {
         "command": "ttslua.updateCompletionItems",

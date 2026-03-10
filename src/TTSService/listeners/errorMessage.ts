@@ -42,7 +42,7 @@ export default async (message: ErrorMessage): Promise<void> => {
     const offendingModule = script.modules[offendingModuleKey]
     const isRoot = offendingModule.name === script.metadata.rootModuleName
     offendingModuleUri = isRoot
-      ? Uri.joinPath(getWorkDir(), isGlobal ? '' : getDirectoryNameFromTTSObject(offendingObject), '/Script.lua')
+      ? Uri.joinPath(getWorkDir(), isGlobal ? '' : getDirectoryNameFromTTSObject(offendingObject), '/Script.ttslua')
       : await locateModule(offendingModule.name)
     if (offendingModuleUri === undefined) throw Error('No offending module found')
     // Calculate the offset range to show the error in the correct position
@@ -60,7 +60,7 @@ export default async (message: ErrorMessage): Promise<void> => {
     }
     // If the script is not bundled, we skip offset calculation and module resolution
     const dirName = getDirectoryNameFromTTSObject(offendingObject)
-    offendingModuleUri = Uri.joinPath(getWorkDir(), message.guid !== '-1' ? dirName : '', '/Script.lua')
+    offendingModuleUri = Uri.joinPath(getWorkDir(), message.guid !== '-1' ? dirName : '', '/Script.ttslua')
     await showJumpToErrorButton(
       fmtMessage(message, errorRange, dirName), offendingModuleUri, errorRange)
   }
