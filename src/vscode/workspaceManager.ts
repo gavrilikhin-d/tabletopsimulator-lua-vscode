@@ -138,6 +138,8 @@ export async function initWorkspace (): Promise<Disposable> {
  */
 export async function changeWorkDir (): Promise<void> {
   const workspaceFolders = workspace.workspaceFolders ?? []
+  const browseOption = '$(folder-opened) Browse for directory...'
+  const defaultOption = `$(refresh) ${L.workDir.defaultTag()}`
   // If there are no workspace folders available
   if (workspaceFolders.length === 0) {
     // If workDir is not default, reset it
@@ -152,12 +154,27 @@ export async function changeWorkDir (): Promise<void> {
   }
   // Prompt for which workspace folder to use
   const selection = await window.showQuickPick(
-    [...workspaceFolders.map(folder => folder.uri.fsPath), `$(refresh) ${L.workDir.defaultTag()}`],
+    [...workspaceFolders.map(folder => folder.uri.fsPath), browseOption, defaultOption],
     { placeHolder: L.workDir.quickPickPlaceHolder() }
   )
   // Handle Cancel
   if (selection === undefined) return
-  if (selection !== `$(refresh) ${L.workDir.defaultTag()}`) {
+  if (selection === browseOption) {
+    const newDir = await window.showOpenDialog({
+      canSelectFiles: false,
+      canSelectFolders: true,
+      canSelectMany: false,
+      openLabel: 'Select Working Directory'
+    })
+    if (newDir === undefined || newDir.length === 0) return
+    const selectedUri = newDir[0]
+    if (!isPresentInWorkspace(selectedUri)) {
+      await addDir(selectedUri.fsPath)
+    }
+    void LSS.set('workDir', selectedUri.fsPath)
+    currentWorkDirUri = selectedUri
+    statusBarItem.text = `$(root-folder) TTS [${basename(selectedUri.fsPath)}]`
+  } else if (selection !== defaultOption) {
     // Any selection but default
     const newWorkDir = workspace.getWorkspaceFolder(Uri.file(selection))
     if (newWorkDir === undefined) {
