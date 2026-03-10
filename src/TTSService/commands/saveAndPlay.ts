@@ -17,8 +17,7 @@ export default async function saveAndPlay (): Promise<void> {
   let saveFile: SaveFile
   try {
     saveFile = embedSave(getWorkDir().fsPath, {
-      scriptExtension: 'lua',
-      includePaths: [
+      includePath: [
         getWorkDir().fsPath,
         docsFolder
       ]

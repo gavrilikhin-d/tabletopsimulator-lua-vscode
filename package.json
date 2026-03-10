@@ -24,7 +24,7 @@
     "watch": "webpack --mode development --watch",
     "lint": "eslint",
     "vscode:prepublish": "webpack --mode production",
-    "package": "vsce package",
+    "package": "npx @vscode/vsce package",
     "i18n": "typesafe-i18n"
   },
   "extensionDependencies": [
@@ -32,7 +32,7 @@
   ],
   "dependencies": {
     "@matanlurey/tts-editor": "github:rolandostar/tts-editor#dist",
-    "@tts-tools/savefile": "https://gitpkg.now.sh/rolandostar/tts-tools/packages/savefile?dev",
+    "@tts-tools/savefile": "^2.4.0",
     "@types/html-escaper": "^3.0.2",
     "@vscode/codicons": "^0.0.35",
     "@vscode/webview-ui-toolkit": "^1.4.0",
