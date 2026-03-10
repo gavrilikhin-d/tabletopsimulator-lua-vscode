@@ -22,7 +22,7 @@ export default async function getScripts (gameResponse?: LoadingANewGame): Promi
   const saveFile = readSave(gameResponse.savePath)
   // Store the save data to our Tree Singleton
   const saveStore = SaveFileStorage.set(saveFile)
-  extractSave(saveFile, { output: getWorkDir().fsPath, withState: true, scriptExtension: 'lua' })
+  extractSave(saveFile, { output: getWorkDir().fsPath, withState: true })
 
   // With the scripts extracted, we can now open them in the editor
   const openConfig = getConfig<autoOpen>('fileManagement.autoOpen')
