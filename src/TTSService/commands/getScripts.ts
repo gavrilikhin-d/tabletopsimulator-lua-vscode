@@ -4,6 +4,7 @@ import { quickStatus } from '@/vscode/statusBarManager'
 import { addDefaultWorkDir, getWorkDir, isWorkdirDefault } from '@/vscode/workspaceManager'
 import TTSService from '@/TTSService'
 import getConfig from '@/utils/getConfig'
+import normalizeTtsSavePath from '@/utils/normalizeTtsSavePath'
 import { extractSave, readSave } from '@tts-tools/savefile'
 import SaveFileStorage from '@/utils/SaveFileTree'
 import { type LoadingANewGame } from '@matanlurey/tts-editor'
@@ -19,7 +20,7 @@ export default async function getScripts (gameResponse?: LoadingANewGame): Promi
 
   // Perform the extraction
   if (gameResponse.savePath === '') throw new Error('No save path was provided by TTS')
-  const saveFile = readSave(gameResponse.savePath)
+  const saveFile = readSave(normalizeTtsSavePath(gameResponse.savePath))
   // Store the save data to our Tree Singleton
   const saveStore = SaveFileStorage.set(saveFile)
   extractSave(saveFile, { output: getWorkDir().fsPath, withState: true })

@@ -5,15 +5,16 @@ import FileManager from '@/vscode/fileManager'
 import TTSService from '@/TTSService'
 import { type SaveFile, embedSave } from '@tts-tools/savefile'
 import docsFolder from '@/utils/docsFolder'
+import normalizeTtsSavePath from '@/utils/normalizeTtsSavePath'
 import { type OutgoingJsonObject } from '@matanlurey/tts-editor'
 
 export default async function saveAndPlay (): Promise<void> {
   // When sending scripts, the workdir must be present in workspace
   if (!isPresentInWorkspace(getWorkDir())) { handleWorkDirNotPresent(); return }
   // Retrieve the save path we stored when loading the game
-  const savePath = LSS.get<string>('lastSavePath')
-  if (savePath === undefined) { handleNoSavePathStored(); return }
-  const saveFs = new FileManager(savePath, false)
+  const rawSavePath = LSS.get<string>('lastSavePath')
+  if (rawSavePath === undefined) { handleNoSavePathStored(); return }
+  const saveFs = new FileManager(normalizeTtsSavePath(rawSavePath), false)
   let saveFile: SaveFile
   try {
     saveFile = embedSave(getWorkDir().fsPath, {
