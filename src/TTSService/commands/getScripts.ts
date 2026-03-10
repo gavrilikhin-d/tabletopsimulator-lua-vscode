@@ -28,7 +28,7 @@ export default async function getScripts (gameResponse?: LoadingANewGame): Promi
   // With the scripts extracted, we can now open them in the editor
   const openConfig = getConfig<autoOpen>('fileManagement.autoOpen')
   if (openConfig !== 'None') {
-    void new FileManager('Script.lua').show()
+    void new FileManager('Script.ttslua').show()
     if (openConfig === 'All') {
       for (const path of saveStore.getScriptPaths()) {
         void new FileManager(path).show()

@@ -265,7 +265,9 @@ export default class luaCompletionProvider implements CompletionItemProvider {
     // 3. Either writing their own function, or looking for an event, so add the events
     if (currentToken.scopes[2] !== undefined && currentToken.scopes[2] === 'entity.name.function.lua') {
       // GlobalEvents already include universal event handlers, so we'll just return them
-      if (document.fileName.endsWith('-1.lua')) return this.luaCompletion.completionStore.get('GlobalEvents') ?? []
+      if (document.fileName.endsWith('-1.lua') || document.fileName.endsWith('-1.ttslua')) {
+        return this.luaCompletion.completionStore.get('GlobalEvents') ?? []
+      }
 
       // The API does not make a distinction between global and universal events,
       // so we'll define the global events, and calculate the universal events
