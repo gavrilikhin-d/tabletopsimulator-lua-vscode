@@ -137,9 +137,9 @@ export async function initWorkspace (): Promise<Disposable> {
  * This command will prompt the user for a new workDir to be used
  */
 export async function changeWorkDir (): Promise<void> {
-  const gitFolders = await getGitFolders()
-  // If there are no git repos detected
-  if (gitFolders.length === 0) {
+  const workspaceFolders = workspace.workspaceFolders ?? []
+  // If there are no workspace folders available
+  if (workspaceFolders.length === 0) {
     // If workDir is not default, reset it
     if (!isWorkdirDefault()) { reset(); return }
     // If workDir is default, show error message
@@ -150,9 +150,9 @@ export async function changeWorkDir (): Promise<void> {
         }
       }); return
   }
-  // If git repos are detected prompt for which one to use
+  // Prompt for which workspace folder to use
   const selection = await window.showQuickPick(
-    [...gitFolders.map(d => d.uri.fsPath), `$(refresh) ${L.workDir.defaultTag()}`],
+    [...workspaceFolders.map(folder => folder.uri.fsPath), `$(refresh) ${L.workDir.defaultTag()}`],
     { placeHolder: L.workDir.quickPickPlaceHolder() }
   )
   // Handle Cancel
