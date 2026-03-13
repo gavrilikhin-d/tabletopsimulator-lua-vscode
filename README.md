@@ -12,40 +12,52 @@ Extension for VSCode to make writing Lua scripts for  <a href="https://store.ste
 
 <div align="center">
 
-[![Build Documentation](https://github.com/rolandostar/tabletopsimulator-lua-vscode/actions/workflows/build-docs.yaml/badge.svg?branch=main)](https://github.com/rolandostar/tabletopsimulator-lua-vscode/actions/workflows/build-docs.yaml)
-[![Deploy Extension](https://github.com/rolandostar/tabletopsimulator-lua-vscode/actions/workflows/deploy-to-marketplace.yaml/badge.svg?branch=main)](https://github.com/rolandostar/tabletopsimulator-lua-vscode/actions/workflows/deploy-to-marketplace.yaml)
 </div>
+
 <div align="center">
-<img src="https://badgen.net/badge/uses/TS/blue"/>
-<img src="https://badgen.net/badge/designed in/MS Paint/yellow"/>
+
+[![Development Builds](https://github.com/rolandostar/tabletopsimulator-lua-vscode/actions/workflows/development.yaml/badge.svg?branch=dev)](https://github.com/rolandostar/tabletopsimulator-lua-vscode/actions/workflows/development.yaml)
+[![Release Builds](https://github.com/rolandostar/tabletopsimulator-lua-vscode/actions/workflows/release.yaml/badge.svg?branch=main)](https://github.com/rolandostar/tabletopsimulator-lua-vscode/releases)
+</div>
+
+<div align="center">
+
+<img src="https://badgen.net/github/tag/rolandostar/tabletopsimulator-lua-vscode?icon=github"/>
+<img src="https://badgen.net/vs-marketplace/d/rolandostar.tabletopsimulator-lua"/>
+</div>
+
+<div align="center">
+<img src="https://badgen.net/badge/built with/TS/blue?icon"/>
+<img src="https://badgen.net/badge/designed in/MS Paint/orange"/>
 <img src="https://badgen.net/badge/made%20with/%E2%9D%A4/red"/>
 </div>
 
 ## Features
 
 - Get/Send Scripts
-- <img src="media/docs/new.png" width="80"/> Execute Lua without Save & Play
-- <img src="media/docs/new.png" width="80"/> Improved Code autocompletion for Lua
+  - <img src="docs/static/img/new.png" width="80"/> New architecture, improving reliability
+- <img src="docs/static/img/new.png" width="80"/> Execute Lua without Save & Play
+- <img src="docs/static/img/new.png" width="80"/> Improved Code autocompletion for Lua
   - Smart `GUID` suggestions which scans your save file, it even detects newly-created objects.
   - Update to latest available TTS API without waiting for manual updates. ([Learn More](here))
-- <img src="media/docs/new.png" width="80"/> Added Code autocompletion for XML!
-- <img src="media/docs/new.png" width="80"/> Added Version Control Support, you can now more easily use Git to manage your scripts!
-- <img src="media/docs/new.png" width="80"/> Hover over a `GUID` in VSCode to Highlight the object In-Game
+- <img src="docs/static/img/new.png" width="80"/> Added Code autocompletion for XML!
+- <img src="docs/static/img/new.png" width="80"/> Added Version Control Support, you can now more easily use Git to manage your scripts!
+- <img src="docs/static/img/new.png" width="80"/> Hover over a `GUID` in VSCode to Highlight the object In-Game
 - Nested file support
   - `require("")` for Lua
   - `<Include src=""/>` for XML
   - Configurable search patterns and lookup directories (yes, plural)
   - Works with absolute directories, perfect for source controlled projects
-  - <img src="media/docs/new.png" width="80"/> Debug module resolution issues right in VSCode (Never again wonder why your file isn't reachable)
-- <img src="media/docs/new.png" width="80"/> Improved Configuration (Made them clearer and categorized)
+  - <img src="docs/static/img/new.png" width="80"/> Debug module resolution issues right in VSCode (Never again wonder why your file isn't reachable)
+- <img src="docs/static/img/new.png" width="80"/> Improved Configuration (Made them clearer and categorized)
 - Built-in Console
   - Integration with [Console++](https://github.com/onelivesleft/Console) by onelivesleft ([Tutorial](http://blog.onelivesleft.com/2017/09/debugging-your-tts-mods-with-console.html)) with Automatic Installation!
   - Send commands from VSCode (Adds `onExternalCommand`)
   - Receive output and debug information on VSCode Panel
   - BBCode and nested colors support!
-- <img src="media/docs/new.png" width="80"/> Improved and extensive documentation available at [tts-vscode.rolandostar.com](tts-vscode.rolandostar.com)
+- <img src="docs/static/img/new.png" width="80"/> Improved and extensive documentation available at [tts-vscode.rolandostar.com](tts-vscode.rolandostar.com)
   - Learn how to use version control, step-by-step debugging, and more!
-- <img src="media/docs/new.png" width="80"/> Added an experimental asset downloader, which helps you download and rehost assets via Github
+- <img src="docs/static/img/upcoming.png" width="80"/> Experimental asset downloader, which helps you download and rehost assets via Github for your version-controlled projects.
 
 <br/>
 

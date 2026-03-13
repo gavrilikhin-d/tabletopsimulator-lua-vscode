@@ -3,12 +3,12 @@
   "displayName": "Tabletop Simulator Lua",
   "author": "Rolando Romero <contact@rolandostar.com> (https://rolandostar.com/)",
   "description": "Extension for VSCode to make writing Lua scripts for Tabletop Simulator easier.",
-  "version": "2.0.0-rc1",
+  "version": "2.0.0-alpha.1",
   "publisher": "rolandostar",
   "license": "MIT",
   "engines": {
     "node": ">=12.9.0",
-    "vscode": "^1.72.0"
+    "vscode": "^1.86.0"
   },
   "repository": {
     "type": "git",
@@ -18,65 +18,58 @@
     "Programming Languages",
     "Other"
   ],
+  "main": "./dist/client.bundle.js",
   "scripts": {
     "compile": "webpack --mode development",
     "watch": "webpack --mode development --watch",
-    "lint": "gts lint",
-    "pretest": "npm run lint && npm run test-compile",
-    "test-compile": "tsc",
-    "test": "node ./dist/test/runTest.js",
-    "fix": "gts fix",
+    "lint": "eslint",
     "vscode:prepublish": "webpack --mode production",
-    "package": "vsce package"
+    "package": "npx @vscode/vsce package",
+    "i18n": "typesafe-i18n"
   },
   "extensionDependencies": [
     "draivin.hscopes"
   ],
   "dependencies": {
-    "@vscode/codicons": "^0.0.32",
-    "axios": "^1.1.2",
-    "glob": "^8.0.3",
+    "@matanlurey/tts-editor": "github:rolandostar/tts-editor#dist",
+    "@tts-tools/savefile": "^2.4.0",
+    "@types/html-escaper": "^3.0.2",
+    "@vscode/codicons": "^0.0.35",
+    "@vscode/webview-ui-toolkit": "^1.4.0",
+    "compare-versions": "^6.1.0",
     "html-escaper": "^3.0.3",
     "luabundle": "^1.6.0",
-    "nodejs-file-downloader": "^4.10.2",
-    "require-module-from-string": "^1.0.19"
+    "node-fetch": "^3.3.2",
+    "typesafe-i18n": "^5.26.2"
   },
   "devDependencies": {
-    "@types/glob": "^8.0.0",
-    "@types/mocha": "^10.0.0",
-    "@types/node": "~18.8.4",
-    "@types/vscode": "^1.72.0",
-    "@typescript-eslint/eslint-plugin": "^5.40.0",
-    "@typescript-eslint/parser": "^5.40.0",
-    "@vscode/test-electron": "^2.1.5",
-    "copy-webpack-plugin": "^11.0.0",
-    "eslint": "^8.25.0",
-    "eslint-plugin-node": "^11.1.0",
-    "eslint-plugin-prettier": "^4.2.1",
-    "gts": "^3.1.1",
-    "mocha": "^10.0.0",
-    "terser-webpack-plugin": "^5.3.6",
-    "ts-loader": "^9.4.1",
-    "typescript": "^4.8.4",
-    "webpack": "^5.74.0",
-    "webpack-cli": "^4.10.0"
+    "@types/node": "^20.11.17",
+    "@types/vscode": "^1.86.0",
+    "@types/webpack-env": "^1.18.4",
+    "@typescript-eslint/parser": "^6.21.0",
+    "copy-webpack-plugin": "^12.0.2",
+    "eslint": "^8.56.0",
+    "eslint-config-standard-with-typescript": "^43.0.1",
+    "terser-webpack-plugin": "^5.3.10",
+    "ts-loader": "^9.5.1",
+    "tsconfig-paths-webpack-plugin": "^4.1.0",
+    "typescript": "^5.3.3",
+    "webpack": "^5.90.1",
+    "webpack-cli": "^5.1.4"
   },
   "activationEvents": [
     "onWebviewPanel:TTSConsole",
     "workspaceContains:*.lua",
-    "onLanguage:lua",
-    "onCommand:ttslua.openConsole",
-    "onCommand:ttslua.getScripts",
-    "onCommand:ttslua.saveAndPlay",
-    "onCommand:ttslua.installConsole",
-    "onCommand:ttslua.addGlobalInclude",
-    "onCommand:ttslua.updateCompletionItems",
-    "onCommand:ttslua.forceAutocompleteUpdate",
-    "onCommand:ttslua.changeWorkDir",
-    "onCommand:ttslua.downloadAssets"
+    "workspaceContains:*.tts",
+    "workspaceContains:*.ttslua",
+    "onLanguage:lua"
   ],
-  "main": "./dist/main.js",
   "contributes": {
+    "configurationDefaults": {
+      "files.associations": {
+        "*.ttslua": "lua"
+      }
+    },
     "commands": [
       {
         "command": "ttslua.updateCompletionItems",
@@ -130,6 +123,11 @@
         "command": "ttslua.downloadAssets",
         "title": "Download assets",
         "category": "TTS Lua"
+      },
+      {
+        "command": "ttslua.refresh",
+        "title": "Refresh",
+        "category": "TTS Lua"
       }
     ],
     "menus": {
@@ -138,6 +136,12 @@
           "when": "editorHasSelection",
           "command": "ttslua.executeLua",
           "group": "0_Custom"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "ttslua.executeLua",
+          "group": "navigation"
         }
       ]
     },
@@ -181,14 +185,12 @@
             ]
           },
           "ttslua.fileManagement.createXML": {
-            "title": "Create XML UI file when object sent from Tabletop Simulator",
             "description": "When an individual object is sent from Tabletop Simulator which has no XML UI, generate a blank XML file for it.",
             "type": "boolean",
             "default": false
           },
           "ttslua.fileManagement.includePaths": {
-            "title": "Additional paths to search for files",
-            "markdownDescription": "Both `~/Documents/Tabletop Simulator` and currently opened Folders in workspace are always included in search path. [Learn More](https://tts-vscode.rolandostar.com/extension/moduleResolution)\n\neg. `C:\\Users\\<YourName>\\MyTTSFiles\\`",
+            "markdownDescription": "Additional paths to search for files\nBoth `~/Documents/Tabletop Simulator` and currently opened Folders in workspace are always included in search path. [Learn More](https://tts-vscode.rolandostar.com/extension/moduleResolution)\n\neg. `C:\\Users\\<YourName>\\MyTTSFiles\\`",
             "type": "array",
             "items": {
               "type": "string"
@@ -196,8 +198,7 @@
             "default": []
           },
           "ttslua.fileManagement.luaSearchPattern": {
-            "title": "Pattern used to look for require'd files",
-            "markdownDescription": "`?.lua` is always searched for.\n\nDescribed in Lua's [search path patterns](https://www.lua.org/pil/8.1.html).",
+            "markdownDescription": "Pattern used to look for require'd files\n\n`?.lua` is always searched for.\n\nDescribed in Lua's [search path patterns](https://www.lua.org/pil/8.1.html).",
             "type": "array",
             "items": {
               "type": "string"
@@ -208,11 +209,10 @@
             ],
             "minItems": 1
           },
-          "ttslua.fileManagement.saveName": {
-            "title": "How to name saved files",
-            "markdownDescription": "When using version control, how should the save file be named.\n\nExtension will always be `.json`",
-            "type": "string",
-            "default": "savegame"
+          "ttslua.fileManagement.TSO.enabled": {
+            "markdownDescription": "This will allow you to use .tso files in your workspace. This is an experimental feature and may not work as expected. [Learn More](https://tts-vscode.rolandostar.com/extension/tsoFiles)",
+            "type": "boolean",
+            "default": false
           }
         }
       },
@@ -221,6 +221,18 @@
         "id": "ttslua.autocompletion",
         "title": "Autocompletion",
         "properties": {
+          "ttslua.autocompletion.luaEnabled": {
+            "title": "Enable Lua Autocompletion",
+            "description": "Enable autocompletion for Lua files.",
+            "type": "boolean",
+            "default": "true"
+          },
+          "ttslua.autocompletion.xmlEnabled": {
+            "title": "Enable XML Autocompletion",
+            "description": "Enable autocompletion for XML files.",
+            "type": "boolean",
+            "default": "true"
+          },
           "ttslua.autocompletion.coroutineSuffix": {
             "title": "Coroutine Suffix",
             "description": "When automatically creating an internal coroutine function this is appended to the parent function's name.",
@@ -290,6 +302,15 @@
         "id": "ttslua.misc",
         "title": "Miscellaneous",
         "properties": {
+          "ttslua.misc.locale": {
+            "markdownDescription": "Select the language to use for the extension. [Learn More](http://tts-vscode.rolandostar.com/support/locales)",
+            "type": "string",
+            "default": "en-US",
+            "enum": [
+              "en-US",
+              "es-MX"
+            ]
+          },
           "ttslua.misc.disableDirectoryWarning": {
             "markdownDescription": "When enabled, the extension will not show a warning when directories are deteced in the In-Game Files. [Learn More](http://tts-vscode.rolandostar.com/support/dirWarning)",
             "type": "boolean",
@@ -299,6 +320,12 @@
             "markdownDescription": "When enabled, the extension will output the paths and patterns it's using to locate includes and requires. Useful for debugging `ModuleResolution` errors.[Learn More](https://tts-vscode.rolandostar.com/support/debuggingModuleResolution)\n\nOpen the Developer Tools to see the output, default hotkey `Ctrl+Shift+I`.",
             "type": "boolean",
             "default": false
+          },
+          "ttslua.misc.host": {
+            "markdownDescription": "The host to use for the extension.",
+            "type": "string",
+            "default": "localhost",
+            "minLength": 1
           }
         }
       }
@@ -314,7 +341,7 @@
             "title": "1. Start the Game! 🎯",
             "description": "TTS Lua depends on Tabletop Simulator running, so go ahead, start it up and load an empty save!",
             "media": {
-              "image": "media/docs/banner.png",
+              "image": "assets/media/docs/banner.png",
               "altText": "Banner Image"
             },
             "completionEvents": [
@@ -326,7 +353,7 @@
             "title": "2. Load a Save 📂",
             "description": "This step will change a setting and check off when the setting has changed\n[Change Setting](command:getting-started-sample.changeSetting)",
             "media": {
-              "markdown": "media/markdown.md"
+              "markdown": "assets/media/markdown.md"
             },
             "completionEvents": [
               "onSettingChanged:getting-started-sample.sampleSetting"
@@ -337,7 +364,7 @@
             "title": "3. Get Scripts ⏬",
             "description": "This step will change a setting and check off when the setting has changed\n[Change Setting](command:getting-started-sample.changeSetting)",
             "media": {
-              "markdown": "media/markdown.md"
+              "markdown": "assets/media/markdown.md"
             },
             "completionEvents": [
               "onSettingChanged:getting-started-sample.sampleSetting"
@@ -348,7 +375,7 @@
             "title": "4. Make Changes ⌨️",
             "description": "This step will change a setting and check off when the setting has changed\n[Change Setting](command:getting-started-sample.changeSetting)",
             "media": {
-              "markdown": "media/markdown.md"
+              "markdown": "assets/media/markdown.md"
             },
             "completionEvents": [
               "onSettingChanged:getting-started-sample.sampleSetting"
@@ -359,7 +386,7 @@
             "title": "5. Save and Play! 💾",
             "description": "This step will change a setting and check off when the setting has changed\n[Change Setting](command:getting-started-sample.changeSetting)",
             "media": {
-              "markdown": "media/markdown.md"
+              "markdown": "assets/media/markdown.md"
             },
             "completionEvents": [
               "onSettingChanged:getting-started-sample.sampleSetting"
@@ -370,7 +397,7 @@
             "title": "6. Install Console++ 😎👉👉",
             "description": "This step will change a setting and check off when the setting has changed\n[Change Setting](command:getting-started-sample.changeSetting)",
             "media": {
-              "markdown": "media/markdown.md"
+              "markdown": "assets/media/markdown.md"
             },
             "completionEvents": [
               "onSettingChanged:getting-started-sample.sampleSetting"
@@ -381,7 +408,7 @@
             "title": "7. Include External Files",
             "description": "This step will change a setting and check off when the setting has changed\n[Change Setting](command:getting-started-sample.changeSetting)",
             "media": {
-              "markdown": "media/markdown.md"
+              "markdown": "assets/media/markdown.md"
             },
             "completionEvents": [
               "onSettingChanged:getting-started-sample.sampleSetting"
@@ -392,7 +419,7 @@
             "title": "8. Open Console++",
             "description": "This step will change a setting and check off when the setting has changed\n[Change Setting](command:getting-started-sample.changeSetting)",
             "media": {
-              "markdown": "media/markdown.md"
+              "markdown": "assets/media/markdown.md"
             },
             "completionEvents": [
               "onSettingChanged:getting-started-sample.sampleSetting"
@@ -403,7 +430,7 @@
             "title": "Done 🎉",
             "description": "This step will change a setting and check off when the setting has changed\n[Change Setting](command:getting-started-sample.changeSetting)",
             "media": {
-              "markdown": "media/markdown.md"
+              "markdown": "assets/media/markdown.md"
             },
             "completionEvents": [
               "onSettingChanged:getting-started-sample.sampleSetting"
@@ -411,10 +438,27 @@
           }
         ]
       }
+    ],
+    "views": {
+      "explorer": [
+        {
+          "id": "ttslua-explorer",
+          "name": "TTS Objects",
+          "icon": "assets/media/tts.svg",
+          "contextualTitle": "TTS Objects",
+          "visibility": "visible"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "ttslua-explorer",
+        "contents": "In order to edit TTS Objects, you must have a Tabletop Simulator game running and a save loaded.\nYou can then load the scripts from the game and start editing!\n[Get Scripts](command:ttslua.getScripts)\nTo learn more about the extension, visit the [documentation](https://tts-vscode.rolandostar.com/)"
+      }
     ]
   },
   "qna": "false",
-  "icon": "media/marketplace/icon.png",
+  "icon": "assets/media/marketplace/icon.png",
   "galleryBanner": {
     "color": "#1F1F23",
     "theme": "dark"

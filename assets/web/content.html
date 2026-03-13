@@ -1,0 +1,79 @@
+<!-- <!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'nonce-{{nonce}}';">
+    <title>Hello World!</title>
+  </head>
+  <body>
+    <h1>Hello World!</h1>
+    <vscode-button id="howdy">Howdy!</vscode-button>
+    <script type="module" nonce="{{nonce}}" src="{{scriptUri}}"></script>
+  </body>
+</html> -->
+
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <!--
+      Use a content security policy to only allow loading styles/css extension directory,
+      only allow scripts that have a specific nonce, and fonts from a specific site.
+    -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="
+        default-src 'none';
+        style-src  {{cspSource}} https://fonts.googleapis.com 'unsafe-inline';
+        script-src {{cspSource}} 'nonce-{{nonce}}';
+        font-src   {{cspSource}} https://fonts.gstatic.com;
+      "
+    >
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <style>
+    :root {
+      --ttslua-console-font-family: {{fontFamily}};
+      --ttslua-console-font-size: {{fontSize}}px;
+    }
+    </style>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Amaranth&family=Roboto+Mono&display=swap" rel="stylesheet" />
+    <link href="{{codiconsUri}}" rel="stylesheet" />
+    <!-- <link href="{{styleResetUri}}" rel="stylesheet" /> -->
+    <!-- <link href="{{styleVSCodeUri}}" rel="stylesheet" /> -->
+    <link href="{{styleMainUri}}" rel="stylesheet" />
+</head>
+<body>
+  <div id="data"></div>
+  <div id="commandInputWrapper">
+    <!-- <input type="textbox" placeholder=">command"/> -->
+    <vscode-text-field placeholder=">command" id="input">
+      <span slot="end" class="codicon codicon-text-size" id="commandState"></span>
+    </vscode-text-field>
+    <!-- <button id="send">
+
+    </button> -->
+    <vscode-button id="send">
+      <span class="codicon codicon-chevron-right"></span>
+    </vscode-button>
+  </div>
+  <vscode-button appearance="icon" aria-label="Clear" id="clear">
+    <span class="codicon codicon-clear-all"></span>
+  </vscode-button>
+  <!-- <button id="clear">
+    <i class="codicon codicon-clear-all"></i>
+  </button> -->
+  <script
+    id="mainScript"
+    type="module"
+    clearOnFocus="{{clearOnFocus}}"
+    nonce="{{nonce}}"
+    src="{{scriptUri}}"
+  >
+  </script>
+</body>
+</html>
