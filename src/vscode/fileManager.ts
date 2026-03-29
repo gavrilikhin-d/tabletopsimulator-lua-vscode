@@ -13,7 +13,10 @@ import uriExists from '@/utils/uriExists'
 export default class FileManager {
   private readonly FileUri: Uri
 
-  public constructor (public filename: string | Uri, fromWorkDir = true) {
+  public constructor(
+    public filename: string | Uri,
+    fromWorkDir = true
+  ) {
     if (typeof filename === 'string') {
       this.FileUri = fromWorkDir
         ? Uri.file(normalize(join(getWorkDir().fsPath, filename)))
@@ -21,18 +24,18 @@ export default class FileManager {
     } else this.FileUri = filename
   }
 
-  public async write (text: string): Promise<void> {
+  public async write(text: string): Promise<void> {
     // Check if path.dirname exists
     const dir = Uri.file(dirname(this.FileUri.fsPath))
     if (!(await uriExists(dir))) await workspace.fs.createDirectory(dir)
     await workspace.fs.writeFile(this.FileUri, new TextEncoder().encode(text))
   }
 
-  public async read (): Promise<string> {
+  public async read(): Promise<string> {
     return (await Promise.resolve(workspace.fs.readFile(this.FileUri))).toString()
   }
 
-  public async show ({ preserveFocus = true, preview = false } = {}): Promise<TextEditor> {
+  public async show({ preserveFocus = true, preview = false } = {}): Promise<TextEditor> {
     return await Promise.resolve(window.showTextDocument(this.FileUri, { preserveFocus, preview }))
   }
 
@@ -42,12 +45,9 @@ export default class FileManager {
    * @param options Options for the editor
    * @returns
    */
-  public async open (
+  public async open(
     content: string,
-    {
-      preserveFocus = true,
-      preview = false
-    } = {}
+    { preserveFocus = true, preview = false } = {}
   ): Promise<TextEditor> {
     const doc = await workspace.openTextDocument(this.FileUri.with({ scheme: 'untitled' }))
     const editor = await window.showTextDocument(doc, { preserveFocus, preview })
@@ -57,9 +57,11 @@ export default class FileManager {
     return editor
   }
 
-  public async erase (): Promise<void> {
+  public async erase(): Promise<void> {
     await Promise.resolve(workspace.fs.delete(this.FileUri))
   }
 
-  public getUri (): Uri { return this.FileUri }
+  public getUri(): Uri {
+    return this.FileUri
+  }
 }

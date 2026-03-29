@@ -9,4 +9,5 @@ import { type TTSObject } from '@tts-tools/savefile'
 export default (object: TTSObject | IncomingJsonObject): string =>
   ('Nickname' in object
     ? `${object.Nickname.length > 0 ? object.Nickname : object.Name}.${object.GUID}`
-    : `${object.name}.${object.guid}`).replace(/[^\w ^&'@{}[\],$=!\-#()%.+~_]/g, '-')
+    : `${object.name}.${object.guid}`
+  ).replace(/[^\w ^&'@{}[\],$=!\-#()%.+~_]/g, '-')

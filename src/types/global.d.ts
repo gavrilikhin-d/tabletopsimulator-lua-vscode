@@ -1,7 +1,7 @@
 export {}
 
 declare global {
-  type InGameObjectsList = Record<string, { name?: string, type?: string, iname?: string }>
+  type InGameObjectsList = Record<string, { name?: string; type?: string; iname?: string }>
   export interface GameObject {
     objectProps?: string
     location?: string

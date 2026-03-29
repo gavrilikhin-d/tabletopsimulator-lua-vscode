@@ -10,10 +10,15 @@ import TTSService from '@/TTSService'
 import getExtensionUri from '@/utils/getExtensionUri'
 import isGuidValid from '@/utils/isGuidValid'
 
-const luaScript = fs.readFileSync(vscode.Uri.joinPath(getExtensionUri(), 'assets', 'lua', 'highlightVsCode.lua').fsPath, 'utf-8').toString()
+const luaScript = fs
+  .readFileSync(
+    vscode.Uri.joinPath(getExtensionUri(), 'assets', 'lua', 'highlightVsCode.lua').fsPath,
+    'utf-8'
+  )
+  .toString()
 
 export default class LuaHoverProvider implements vscode.HoverProvider {
-  async provideHover (
+  async provideHover(
     document: vscode.TextDocument,
     position: vscode.Position
   ): Promise<vscode.Hover | null> {

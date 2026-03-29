@@ -10,10 +10,10 @@ import SaveFileStorage from '@/utils/SaveFileTree'
 import { type LoadingANewGame } from '@matanlurey/tts-editor'
 import { prompts } from '@/vscode/windowManager'
 
-export default async function getScripts (gameResponse?: LoadingANewGame): Promise<void> {
+export default async function getScripts(gameResponse?: LoadingANewGame): Promise<void> {
   if (await prompts.getScriptsTest()) return
   const statusBar = window.setStatusBarMessage('$(sync~spin) Receiving scripts')
-  gameResponse = gameResponse ?? await TTSService.getApi().getLuaScripts()
+  gameResponse = gameResponse ?? (await TTSService.getApi().getLuaScripts())
 
   // Add folder to workspace (Only if default workspace is used, since non-default workspaces are added by the user)
   if (isWorkdirDefault()) await addDefaultWorkDir()

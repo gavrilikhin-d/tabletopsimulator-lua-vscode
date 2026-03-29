@@ -7,7 +7,7 @@ import docsFolder from '@/utils/docsFolder'
  * All it does is copy the files from the extension's folder to the TTS docs folder.
  * @returns {Promise<void>} A promise that resolves when the file copying is complete
  */
-export async function installConsole (extensionPath: string): Promise<void> {
+export async function installConsole(extensionPath: string): Promise<void> {
   const files = [
     {
       src: join(extensionPath, 'assets', 'scripts', 'Console', 'console.lua'),
@@ -23,7 +23,7 @@ export async function installConsole (extensionPath: string): Promise<void> {
     }
   ]
   await Promise.all(
-    files.map(file =>
+    files.map((file) =>
       workspace.fs.copy(Uri.file(file.src), Uri.file(file.dst), {
         overwrite: true
       })
@@ -31,10 +31,13 @@ export async function installConsole (extensionPath: string): Promise<void> {
   )
     .then(() => {
       const openInstallLocation = 'Open Install Location'
-      return window.showInformationMessage('Console++ Installation Successful', openInstallLocation)
-        .then(s => s === openInstallLocation ? env.openExternal(Uri.file(docsFolder)) : undefined)
+      return window
+        .showInformationMessage('Console++ Installation Successful', openInstallLocation)
+        .then((s) =>
+          s === openInstallLocation ? env.openExternal(Uri.file(docsFolder)) : undefined
+        )
     })
-    .catch(reason => {
+    .catch((reason) => {
       return window.showErrorMessage(`Console++ Installation Failed: ${reason}`)
     })
 }

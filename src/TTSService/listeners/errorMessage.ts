@@ -13,7 +13,9 @@ export default async (message: ErrorMessage): Promise<void> => {
   const errorPattern = message.error.match(/.*:\((\d*),(\d*)-(\d*)\):/)
   if (errorPattern === null) {
     // The Error is from execute lua or no pattern found, no button is needed
-    void TTSConsolePanel.currentPanel?.append(message.errorMessagePrefix, { classes: ['callout', 'error'] })
+    void TTSConsolePanel.currentPanel?.append(message.errorMessagePrefix, {
+      classes: ['callout', 'error']
+    })
     void window.showErrorMessage(message.errorMessagePrefix)
     return
   }
@@ -21,10 +23,14 @@ export default async (message: ErrorMessage): Promise<void> => {
   const isGlobal = message.guid === '-1'
   const [, mLine, mStart, mEnd] = errorPattern
   const errorRange = new Range(
-    parseInt(mLine) - 1, parseInt(mStart), parseInt(mLine) - 1, parseInt(mEnd))
+    parseInt(mLine) - 1,
+    parseInt(mStart),
+    parseInt(mLine) - 1,
+    parseInt(mEnd)
+  )
   // Find the errored script from the recently sent files, we use GUID for this
   const gameResponse = await TTSService.getApi().getLuaScripts()
-  const offendingObject = gameResponse.scriptStates.find(s => s.guid === message.guid)
+  const offendingObject = gameResponse.scriptStates.find((s) => s.guid === message.guid)
   // TODO - Handle error
   if (offendingObject === undefined) throw Error('No offending object found')
   let offendingModuleUri: Uri
@@ -32,17 +38,20 @@ export default async (message: ErrorMessage): Promise<void> => {
     // First we attempt to unbundle to get line and column numbers across modules
     const script = unbundleString(offendingObject.script)
     // Find the module which contains the extracted errorRange
-    const offendingModuleKey = Object.keys(script.modules).find(moduleName => {
+    const offendingModuleKey = Object.keys(script.modules).find((moduleName) => {
       const m = script.modules[moduleName]
-      return new Range(m.start.line, m.start.column, m.end.line, m.end.column)
-        .contains(errorRange)
+      return new Range(m.start.line, m.start.column, m.end.line, m.end.column).contains(errorRange)
     })
     if (offendingModuleKey === undefined) throw Error('No offending module found')
     // Once identified, we need to find the module's URI, where we look for depends on if it's the root module and/or global
     const offendingModule = script.modules[offendingModuleKey]
     const isRoot = offendingModule.name === script.metadata.rootModuleName
     offendingModuleUri = isRoot
-      ? Uri.joinPath(getWorkDir(), isGlobal ? '' : getDirectoryNameFromTTSObject(offendingObject), '/Script.ttslua')
+      ? Uri.joinPath(
+          getWorkDir(),
+          isGlobal ? '' : getDirectoryNameFromTTSObject(offendingObject),
+          '/Script.ttslua'
+        )
       : await locateModule(offendingModule.name)
     if (offendingModuleUri === undefined) throw Error('No offending module found')
     // Calculate the offset range to show the error in the correct position
@@ -51,18 +60,35 @@ export default async (message: ErrorMessage): Promise<void> => {
       errorRange.end.translate(-offendingModule.start.line + 1)
     )
     // Step 4: Show the error message with a button to jump to the error
-    await showJumpToErrorButton(fmtMessage(message, offsetRange,
-      !isRoot ? offendingModule.name : isGlobal ? 'Global' : getDirectoryNameFromTTSObject(offendingObject)
-    ), offendingModuleUri, offsetRange)
+    await showJumpToErrorButton(
+      fmtMessage(
+        message,
+        offsetRange,
+        !isRoot
+          ? offendingModule.name
+          : isGlobal
+            ? 'Global'
+            : getDirectoryNameFromTTSObject(offendingObject)
+      ),
+      offendingModuleUri,
+      offsetRange
+    )
   } catch (error) {
     if (!(error instanceof NoBundleMetadataError)) {
       throw error
     }
     // If the script is not bundled, we skip offset calculation and module resolution
     const dirName = getDirectoryNameFromTTSObject(offendingObject)
-    offendingModuleUri = Uri.joinPath(getWorkDir(), message.guid !== '-1' ? dirName : '', '/Script.ttslua')
+    offendingModuleUri = Uri.joinPath(
+      getWorkDir(),
+      message.guid !== '-1' ? dirName : '',
+      '/Script.ttslua'
+    )
     await showJumpToErrorButton(
-      fmtMessage(message, errorRange, dirName), offendingModuleUri, errorRange)
+      fmtMessage(message, errorRange, dirName),
+      offendingModuleUri,
+      errorRange
+    )
   }
 }
 
@@ -71,7 +97,7 @@ const fmtMessage = (msg: ErrorMessage, errorRange: Range, moduleName: string): s
   return `Error in Script (${moduleName}): ${msgArray[0]}(${errorRange.start.line + 1},${errorRange.start.character + 1}-${errorRange.end.character + 1}): ${msgArray.at(-1)}`
 }
 
-async function showJumpToErrorButton (
+async function showJumpToErrorButton(
   message: string,
   offendingModuleUri: Uri,
   errorRange: Range

@@ -32,7 +32,6 @@ export interface IToken {
 }
 
 export interface StackElement {
-  _stackElementBrand: void
   readonly depth: number
   clone: () => StackElement
   equals: (other: StackElement) => boolean

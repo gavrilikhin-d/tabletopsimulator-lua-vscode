@@ -1,10 +1,4 @@
-import {
-  type Disposable,
-  type WebviewPanel,
-  window,
-  Uri,
-  ViewColumn
-} from 'vscode'
+import { type Disposable, type WebviewPanel, window, Uri, ViewColumn } from 'vscode'
 import L from '@/i18n'
 import getExtensionUri from '@/utils/getExtensionUri'
 import getNonce from '@/TTSConsole/getNonce'
@@ -21,7 +15,11 @@ export default class TTSConsolePanel {
   private commandMode = false
 
   // We read the content.html file at import time
-  private readonly panelHTML = fsReadFileSync(Uri.joinPath(TTSConsolePanel.extensionUri, 'assets', 'web', 'content.html').fsPath, 'utf8')
+  private readonly panelHTML = fsReadFileSync(
+    Uri.joinPath(TTSConsolePanel.extensionUri, 'assets', 'web', 'content.html').fsPath,
+    'utf8'
+  )
+
   private readonly webviewUriFromExt = (...items: string[]): Uri =>
     this._panel.webview.asWebviewUri(Uri.joinPath(TTSConsolePanel.extensionUri, ...items))
 
@@ -40,9 +38,15 @@ export default class TTSConsolePanel {
     clearOnFocus: getConfig<boolean>('console.clearOnFocus')
   }
 
-  private constructor (private readonly _panel: WebviewPanel) {
+  private constructor(private readonly _panel: WebviewPanel) {
     // Set an event listener to listen for when the webview panel is disposed
-    this._panel.onDidDispose(() => { this.dispose() }, null, this._disposables)
+    this._panel.onDidDispose(
+      () => {
+        this.dispose()
+      },
+      null,
+      this._disposables
+    )
     // Set the initial HTML content of the webview panel
     this._panel.webview.html = this._getWebviewContent()
     // Set an event listener to listen for messages passed from the webview context
@@ -55,7 +59,7 @@ export default class TTSConsolePanel {
    * Renders the current webview panel if it exists otherwise a new webview panel
    * will be created and displayed.
    */
-  public static render (): WebviewPanel {
+  public static render(): WebviewPanel {
     const column = window.activeTextEditor !== undefined ? ViewColumn.Beside : undefined
     if (TTSConsolePanel.currentPanel !== undefined) {
       // If the webview panel already exists reveal it
@@ -90,7 +94,7 @@ export default class TTSConsolePanel {
   /**
    * Cleans up and disposes of webview resources when the webview panel is closed.
    */
-  public dispose (): void {
+  public dispose(): void {
     TTSConsolePanel.currentPanel = undefined
     this._panel.dispose()
     while (this._disposables.length > 0) {
@@ -108,13 +112,12 @@ export default class TTSConsolePanel {
    * @returns A string containing the HTML that should be
    * rendered within the webview panel
    */
-  private readonly _getWebviewContent = (): string => this.panelHTML.replace(/{{(\w+)}}/g,
-    (match, key) => {
+  private readonly _getWebviewContent = (): string =>
+    this.panelHTML.replace(/{{(\w+)}}/g, (match, key) => {
       if (key in this.templateValueMap) return this.templateValueMap[key].toString()
       // TODO: Add a way to handle missing placeholders
       else throw new Error(`Placeholder "${key}" not found, during webview content replacement.`)
-    }
-  )
+    })
 
   /**
    * Sets up an event listener to listen for messages passed from the webview context and
@@ -122,18 +125,19 @@ export default class TTSConsolePanel {
    *
    * @param webview A reference to the extension webview
    */
-  private _setWebviewMessageListener (): void {
-    this._panel.webview.onDidReceiveMessage((message: { type: 'command' | 'input', text: string }) => {
-      if (message.type === 'command' || this.commandMode) {
-        void TTSService.getApi().customMessage({ command: message.text })
-      } else void TTSService.getApi().customMessage({ input: message.text })
-      if (this.commandMode) {
-        if (['>', 'exit'].includes(message.text)) this.commandMode = false
-      } else if (['>', '>>', '>cmd'].includes(message.text)) this.commandMode = true
-      void this._panel.webview.postMessage({ command: 'commandState', state: this.commandMode })
-    },
-    undefined,
-    this._disposables
+  private _setWebviewMessageListener(): void {
+    this._panel.webview.onDidReceiveMessage(
+      (message: { type: 'command' | 'input'; text: string }) => {
+        if (message.type === 'command' || this.commandMode) {
+          void TTSService.getApi().customMessage({ command: message.text })
+        } else void TTSService.getApi().customMessage({ input: message.text })
+        if (this.commandMode) {
+          if (['>', 'exit'].includes(message.text)) this.commandMode = false
+        } else if (['>', '>>', '>cmd'].includes(message.text)) this.commandMode = true
+        void this._panel.webview.postMessage({ command: 'commandState', state: this.commandMode })
+      },
+      undefined,
+      this._disposables
     )
   }
 
@@ -146,9 +150,10 @@ export default class TTSConsolePanel {
 
   public isVisible = (): boolean => this._panel.visible
 
-  public clear = async (): Promise<boolean> => await this._panel.webview.postMessage({ command: 'clear' })
+  public clear = async (): Promise<boolean> =>
+    await this._panel.webview.postMessage({ command: 'clear' })
 
-  public static revive (panel: WebviewPanel, _state: unknown): void {
+  public static revive(panel: WebviewPanel, _state: unknown): void {
     TTSConsolePanel.currentPanel = new TTSConsolePanel(panel)
   }
 }

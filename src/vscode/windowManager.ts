@@ -16,18 +16,19 @@ import L from '@/i18n'
 type Prompt = () => Promise<boolean>
 
 // Buttons are optional, to check if a button is required, check the prompt name in the i18n file
-function promptFactory (name: string): Prompt {
+function promptFactory(name: string): Prompt {
   type PromptsKey = keyof typeof L.prompts
   return async () => {
     // Get strings from i18n
     const promptMessage = L.prompts[name as PromptsKey]() as string
-    const promptButton =
-      Object.prototype.hasOwnProperty.call(L.prompts, `${name}Button`)
-        ? [L.prompts[`${name}Button` as PromptsKey]() as string]
-        : undefined
+    const promptButton = Object.prototype.hasOwnProperty.call(L.prompts, `${name}Button`)
+      ? [L.prompts[`${name}Button` as PromptsKey]() as string]
+      : undefined
     // Call the prompt, with the button if it exists
     const result = await vscode.window.showInformationMessage(
-      promptMessage, { modal: true }, ...(promptButton ?? [])
+      promptMessage,
+      { modal: true },
+      ...(promptButton ?? [])
     )
     // Return comparison or true if no button was provided
     return promptButton !== undefined ? result !== promptButton[0] : false
@@ -37,10 +38,9 @@ function promptFactory (name: string): Prompt {
 // To generate the prompts, we filter the keys of the i18n file to remove the buttons
 // Then we create a map of the prompts using the promptFactory
 type PromptMap = Record<string, Prompt>
-export const prompts: PromptMap =
-  Object.keys(L.prompts)
-    .filter(key => !key.endsWith('Button'))
-    .reduce<PromptMap>((acc, name) => {
+export const prompts: PromptMap = Object.keys(L.prompts)
+  .filter((key) => !key.endsWith('Button'))
+  .reduce<PromptMap>((acc, name) => {
     acc[name] = promptFactory(name)
     return acc
   }, {})

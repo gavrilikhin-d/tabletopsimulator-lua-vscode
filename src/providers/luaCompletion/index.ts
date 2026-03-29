@@ -1,8 +1,5 @@
 import { TableGenerator } from '@/providers/luaCompletion/TableGenerator'
-import {
-  CompletionItem,
-  CompletionItemKind, MarkdownString, SnippetString
-} from 'vscode'
+import { CompletionItem, CompletionItemKind, MarkdownString, SnippetString } from 'vscode'
 import type { LuaAPI, Member } from './apiManager'
 
 const StringToCompletionKind: Record<string, CompletionItemKind> = {
@@ -16,7 +13,7 @@ export class LuaCompletion {
   public readonly completionStore = new Map<string, CompletionItem[]>()
   public readonly behaviourStore: string[] = []
 
-  constructor (public api: LuaAPI) {
+  constructor(public api: LuaAPI) {
     for (const sectionName in api.sections) {
       // if (!this.completionStore.has(sectionName)) this.completionStore.set(sectionName, [])
       this.completionStore.set(sectionName, this.addMembers(api.sections[sectionName], sectionName))
@@ -24,7 +21,7 @@ export class LuaCompletion {
     this.behaviourStore = api.behaviors
   }
 
-  private addMembers (members: Member[], sectionName: string): CompletionItem[] {
+  private addMembers(members: Member[], sectionName: string): CompletionItem[] {
     // Create Storage if it doesn't exist
     const completionItems: CompletionItem[] = []
     for (const member of members) {
@@ -69,11 +66,14 @@ export class LuaCompletion {
 
       // Create Completion Item
 
-      const cItem = new CompletionItem({
-        label: member.name,
-        description: member.type,
-        detail: funcType ? detailString : undefined
-      }, StringToCompletionKind[member.kind] ?? CompletionItemKind.Text)
+      const cItem = new CompletionItem(
+        {
+          label: member.name,
+          description: member.type,
+          detail: funcType ? detailString : undefined
+        },
+        StringToCompletionKind[member.kind] ?? CompletionItemKind.Text
+      )
       cItem.detail = sectionName
       cItem.insertText = funcType ? insertText : member.name
       cItem.documentation = docString
