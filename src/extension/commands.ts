@@ -21,18 +21,6 @@ import getExtensionUri from '@/utils/getExtensionUri'
 import TTSConsolePanel from '@/TTSConsole'
 
 export default [
-  // {
-  //   id: 'ttslua.forceAutocompleteUpdate',
-  //   fn: () => ttsLuaCompletionProvider.updateCompletionItems(true),
-  // },
-  // {
-  //   id: 'ttslua.updateCompletionItems',
-  //   fn: () => ttsLuaCompletionProvider.updateCompletionItems(),
-  // },
-  // {
-  //   id: 'ttslua.addGlobalInclude',
-  //   fn: () => workspace.addDir2WS(workspace.docsFolder, 'TTS Global Include'),
-  // },
   {
     id: 'ttslua.openConsole',
     fn: TTSConsolePanel.render.bind(TTSConsolePanel)
@@ -47,7 +35,6 @@ export default [
   { id: 'ttslua.getScripts', fn: getScripts },
   { id: 'ttslua.executeLua', fn: executeSelectedLua },
   { id: 'ttslua.changeWorkDir', fn: changeWorkDir }
-  // { id: 'ttslua.downloadAssets', fn: () => TTSAssetGen.downloadAssets() },
 ] as Array<{
   id: string
   fn: (this: vscode.ExtensionContext, ...args: any[]) => unknown
