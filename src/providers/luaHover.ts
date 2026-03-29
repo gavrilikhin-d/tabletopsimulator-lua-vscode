@@ -27,6 +27,11 @@ const luaScript = fs
 export default class LuaHoverProvider implements vscode.HoverProvider {
   private api: apiManager.LuaAPI | undefined
 
+  private isLikelyTtsEventName(name: string): boolean {
+    const shortName = name.split(/[.:]/).at(-1) ?? name
+    return /^on[A-Z_]/u.test(shortName)
+  }
+
   private buildLuaSignatureCodeBlock(
     name: string,
     parameters: Array<{ name: string }>,
@@ -41,8 +46,31 @@ export default class LuaHoverProvider implements vscode.HoverProvider {
     this.api = await apiManager.loadApi()
   }
 
-  private buildTrackedHover(signature: TrackedSignature): vscode.MarkdownString {
+  private getOfficialApiMember(name: string): apiManager.Member | undefined {
+    for (const members of Object.values(this.api?.sections ?? {})) {
+      for (const member of members as apiManager.Member[]) {
+        const shortName = member.name.split(/[.:]/).at(-1) ?? member.name
+        if (member.name === name || shortName === name) return member
+      }
+    }
+    return undefined
+  }
+
+  private buildTrackedHover(
+    signature: TrackedSignature,
+    officialMember?: apiManager.Member
+  ): vscode.MarkdownString {
     const markdown = new vscode.MarkdownString()
+    const hasLocalDescription = signature.description !== undefined
+    const hasLocalParameters = signature.parameters.some(
+      (parameter) => parameter.type !== undefined || parameter.description !== undefined
+    )
+    const hasLocalReturns =
+      signature.returnType !== undefined || signature.returnDescription !== undefined
+    const hasAnyLocalDocumentation = hasLocalDescription || hasLocalParameters || hasLocalReturns
+    if (officialMember?.kind === 'event' || this.isLikelyTtsEventName(signature.name)) {
+      markdown.appendMarkdown('**TTS Event**\n\n')
+    }
     markdown.appendMarkdown(
       this.buildLuaSignatureCodeBlock(
         signature.name,
@@ -51,8 +79,8 @@ export default class LuaHoverProvider implements vscode.HoverProvider {
       )
     )
 
-    if (signature.description !== undefined) markdown.appendMarkdown(`${signature.description}\n\n`)
-    if (signature.parameters.length > 0) {
+    if (hasLocalDescription) markdown.appendMarkdown(`${signature.description}\n\n`)
+    if (hasLocalParameters) {
       markdown.appendMarkdown('**Parameters**\n')
       for (const parameter of signature.parameters) {
         const typeText =
@@ -64,12 +92,37 @@ export default class LuaHoverProvider implements vscode.HoverProvider {
       }
       markdown.appendMarkdown('\n')
     }
-    if (signature.returnType !== undefined || signature.returnDescription !== undefined) {
+    if (hasLocalReturns) {
       markdown.appendMarkdown(
         `**Returns** \`${normalizeDocType(signature.returnType) ?? 'unknown'}\`${
           signature.returnDescription !== undefined ? ` - ${signature.returnDescription}` : ''
         }\n`
       )
+    }
+    if (officialMember !== undefined) {
+      if (hasAnyLocalDocumentation) markdown.appendMarkdown('\n')
+      markdown.appendMarkdown(`${officialMember.description}\n\n`)
+      if ((officialMember.parameters?.length ?? 0) > 0) {
+        markdown.appendMarkdown('**Parameters**\n')
+        for (const parameter of officialMember.parameters ?? []) {
+          const description =
+            parameter.description !== undefined ? ` - ${parameter.description}` : ''
+          markdown.appendMarkdown(`- **${parameter.name}** \`${parameter.type}\`${description}\n`)
+        }
+        markdown.appendMarkdown('\n')
+      }
+      if ((officialMember.return_table?.length ?? 0) > 0) {
+        markdown.appendMarkdown('**Returns**\n')
+        for (const returnField of officialMember.return_table ?? []) {
+          const description =
+            returnField.description !== undefined ? ` - ${returnField.description}` : ''
+          markdown.appendMarkdown(`- \`${returnField.type}\`${description}\n`)
+        }
+        markdown.appendMarkdown('\n')
+      } else if (officialMember.type !== '') {
+        markdown.appendMarkdown(`**Returns** \`${officialMember.type}\`\n\n`)
+      }
+      markdown.appendMarkdown(`[Official Documentation](${officialMember.url})\n`)
     }
     return markdown
   }
@@ -77,6 +130,7 @@ export default class LuaHoverProvider implements vscode.HoverProvider {
   private buildApiHover(member: apiManager.Member): vscode.MarkdownString {
     const markdown = new vscode.MarkdownString()
     const params = member.parameters ?? []
+    if (member.kind === 'event') markdown.appendMarkdown('**TTS Event**\n\n')
     markdown.appendMarkdown(
       this.buildLuaSignatureCodeBlock(
         member.name,
@@ -126,7 +180,9 @@ export default class LuaHoverProvider implements vscode.HoverProvider {
     }
     const trackedSignature = tracked.get(hoveredText)?.[0]
     if (trackedSignature !== undefined) {
-      return new vscode.Hover(this.buildTrackedHover(trackedSignature))
+      return new vscode.Hover(
+        this.buildTrackedHover(trackedSignature, this.getOfficialApiMember(hoveredText))
+      )
     }
 
     const apiMembers = Object.values(this.api?.sections ?? {})
