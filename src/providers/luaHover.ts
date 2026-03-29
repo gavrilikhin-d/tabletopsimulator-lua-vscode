@@ -27,24 +27,29 @@ const luaScript = fs
 export default class LuaHoverProvider implements vscode.HoverProvider {
   private api: apiManager.LuaAPI | undefined
 
+  private buildLuaSignatureCodeBlock(
+    name: string,
+    parameters: Array<{ name: string }>,
+    returnType?: string
+  ): string {
+    const paramsLabel = parameters.map((parameter) => parameter.name).join(', ')
+    const returnSuffix = returnType !== undefined ? ` -> ${normalizeDocType(returnType)}` : ''
+    return ['```lua', `function ${name}(${paramsLabel})${returnSuffix}`, '```', ''].join('\n')
+  }
+
   async preload(): Promise<void> {
     this.api = await apiManager.loadApi()
   }
 
   private buildTrackedHover(signature: TrackedSignature): vscode.MarkdownString {
     const markdown = new vscode.MarkdownString()
-    const signatureLabel = `${signature.name}(${signature.parameters
-      .map((parameter) =>
-        normalizeDocType(parameter.type) !== undefined
-          ? `${parameter.name}: ${normalizeDocType(parameter.type)}`
-          : parameter.name
+    markdown.appendMarkdown(
+      this.buildLuaSignatureCodeBlock(
+        signature.name,
+        signature.parameters,
+        normalizeDocType(signature.returnType)
       )
-      .join(', ')})`
-    markdown.appendMarkdown(`### \`${signatureLabel}\``)
-    if (signature.returnType !== undefined) {
-      markdown.appendMarkdown(` -> \`${normalizeDocType(signature.returnType)}\``)
-    }
-    markdown.appendMarkdown('\n\n')
+    )
 
     if (signature.description !== undefined) markdown.appendMarkdown(`${signature.description}\n\n`)
     if (signature.parameters.length > 0) {
@@ -72,12 +77,13 @@ export default class LuaHoverProvider implements vscode.HoverProvider {
   private buildApiHover(member: apiManager.Member): vscode.MarkdownString {
     const markdown = new vscode.MarkdownString()
     const params = member.parameters ?? []
-    const signature = `${member.name}(${params
-      .map((parameter) => `${parameter.name}: ${parameter.type}`)
-      .join(', ')})`
-    markdown.appendMarkdown(`### \`${signature}\``)
-    if (member.type !== '') markdown.appendMarkdown(` -> \`${member.type}\``)
-    markdown.appendMarkdown('\n\n')
+    markdown.appendMarkdown(
+      this.buildLuaSignatureCodeBlock(
+        member.name,
+        params.map((parameter) => ({ name: parameter.name })),
+        member.type !== '' ? member.type : undefined
+      )
+    )
     markdown.appendMarkdown(`${member.description}\n\n`)
     if (params.length > 0) {
       markdown.appendMarkdown('**Parameters**\n')
