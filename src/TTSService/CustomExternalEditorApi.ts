@@ -10,14 +10,19 @@ import { informMultipleInstances, informGameNotRunning } from '@/vscode/errorHan
 import ExternalEditorApi, { type JsonMessage, type Options } from '@matanlurey/tts-editor'
 import { Socket } from 'net'
 import L from '@/i18n'
+import { logger } from '@/vscode/logger'
 
 export default class CustomExternalEditorApi extends ExternalEditorApi {
-  constructor (options: Options = {}) {
+  constructor(options: Options = {}) {
     super(options)
-    this.server.on('connection', socket => {
+    this.server.on('connection', (socket) => {
       const chunks: Buffer[] = []
-      socket.on('data', (data: Buffer) => { chunks.push(data) })
-      socket.on('end', () => { this.onDataReceived(Buffer.concat(chunks).toString('utf-8')) })
+      socket.on('data', (data: Buffer) => {
+        chunks.push(data)
+      })
+      socket.on('end', () => {
+        this.onDataReceived(Buffer.concat(chunks).toString('utf-8'))
+      })
     })
   }
 
@@ -25,7 +30,7 @@ export default class CustomExternalEditorApi extends ExternalEditorApi {
    * Listens for incoming connections.
    * Returns the port being listened on, if available.
    */
-  public async listen (): Promise<number | undefined> {
+  public async listen(): Promise<number | undefined> {
     this.server.listen(this.serverPort, getConfig('misc.host'))
     const address = this.server.address()
     return address != null && typeof address !== 'string' ? address.port : undefined
@@ -33,16 +38,18 @@ export default class CustomExternalEditorApi extends ExternalEditorApi {
 
   protected async send<T extends number>(message: JsonMessage<T>): Promise<void> {
     const client = new Socket()
-    if (!this.server.listening) { await this.listen() }
+    if (!this.server.listening) {
+      await this.listen()
+    }
     await new Promise<void>((resolve, reject) => {
       client.once('error', (err: NodeJS.ErrnoException) => {
         if (err.code === 'EADDRINUSE') informMultipleInstances()
         if (err.code === 'ECONNREFUSED') informGameNotRunning()
-        console.error(L.errors.serverError, err)
+        logger.error(L.errors.serverError, err)
         reject(err)
       })
       client.connect(this.clientPort, getConfig('misc.host'), () => {
-        client.write(JSON.stringify(message), error => {
+        client.write(JSON.stringify(message), (error) => {
           error != null ? reject(error) : resolve()
           client.destroy()
         })

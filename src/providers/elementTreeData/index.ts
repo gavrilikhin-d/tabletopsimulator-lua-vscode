@@ -9,12 +9,12 @@ import SaveFileStorage from '@/utils/SaveFileTree'
 
 export default class TTSElementTreeDataProvider implements vscode.TreeDataProvider<TTSItem> {
   getTreeItem = (element: TTSItem): TTSItem => element
-  async getChildren (element?: TTSItem): Promise<TTSItem[]> {
+  async getChildren(element?: TTSItem): Promise<TTSItem[]> {
     return element === undefined ? this.getAllObjects() : this.getObjectContent(element)
   }
 
   private readonly getAllObjects = (): TTSObjectItem[] => {
-    return SaveFileStorage.get().saveFile.ObjectStates.map(obj => new TTSObjectItem(obj))
+    return SaveFileStorage.get().saveFile.ObjectStates.map((obj) => new TTSObjectItem(obj))
   }
 
   private readonly getObjectContent = (element: TTSItem): TTSItem[] => {
@@ -25,11 +25,11 @@ export default class TTSElementTreeDataProvider implements vscode.TreeDataProvid
   // readonly onDidChangeTreeData: vscode.Event<TTSItem | undefined | null > = this._onDidChangeTreeData.event
 
   private readonly changeEvent = new vscode.EventEmitter<void>()
-  public get onDidChangeTreeData (): vscode.Event<void> {
+  public get onDidChangeTreeData(): vscode.Event<void> {
     return this.changeEvent.event
   }
 
-  refresh (): void {
+  refresh(): void {
     this.changeEvent.fire()
   }
 }

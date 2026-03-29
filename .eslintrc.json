@@ -3,26 +3,25 @@
 	"parserOptions": {
 		"ecmaVersion": 6,
 		"sourceType": "module",
-		"project": "../tsconfig.json"
+		"project": "./tsconfig.json"
 	},
 	"env": {
 		"node": true
 	},
-	"extends": "standard-with-typescript",
+	"extends": [
+		"standard-with-typescript",
+		"plugin:prettier/recommended"
+	],
 	"rules": {
-		"semi": "error",
-		"no-extra-semi": "warn",
 		"curly": "warn",
-		"quotes": ["error", "single", { "allowTemplateLiterals": true } ],
 		"eqeqeq": "error",
-		"indent": "off",
-		"@typescript-eslint/indent": ["warn", 2, { "SwitchCase": 1 } ],
 		"max-len": ["warn", {
       "code": 100,
       "ignoreComments": true,
       "ignoreUrls": true,
       "ignoreStrings": true,
       "ignoreTemplateLiterals": true
-    }]
+    }],
+		"prettier/prettier": "error"
 	}
 }

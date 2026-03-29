@@ -1,18 +1,494 @@
 import getConfig from '@/utils/getConfig'
 import {
-  type CompletionItemProvider, type TextDocument, type Position, type CancellationToken,
-  type CompletionContext, CompletionItem, type CompletionList, CompletionItemKind, SnippetString,
-  type CompletionItemLabel
+  type CompletionItemProvider,
+  type TextDocument,
+  type Position,
+  type CancellationToken,
+  type CompletionContext,
+  CompletionItem,
+  type CompletionList,
+  CompletionItemKind,
+  CompletionItemTag,
+  MarkdownString,
+  SnippetString,
+  type CompletionItemLabel,
+  workspace
 } from 'vscode'
 import { LuaCompletion } from '.'
 import * as apiManager from './apiManager'
 import { type LineToken, hs } from '..'
+import { logger } from '@/vscode/logger'
+import { locateModule } from '@/utils/moduleResolution'
 
-function snippet (label: string, insert: string, sortText = ''): CompletionItem {
+function snippet(label: string, insert: string, sortText = ''): CompletionItem {
   const result = new CompletionItem(label, CompletionItemKind.Snippet)
   result.insertText = new SnippetString(insert)
   result.sortText = sortText
   return result
+}
+
+function completionLabelToString(label: CompletionItem['label']): string {
+  return typeof label === 'string' ? label : label.label
+}
+
+interface DefinitionPattern {
+  regex: RegExp
+  kind: CompletionItemKind
+  isLocalDefinition: boolean
+  hasParameters: boolean
+}
+
+interface SymbolMetadata {
+  parameters: Array<{
+    name: string
+    type?: string
+    description?: string
+  }>
+  returnType?: string
+  returnDescription?: string
+  description?: string
+  isExported?: boolean
+  isDeprecated?: boolean
+}
+
+type SymbolCompletionMode = 'normal' | 'export-string'
+
+function isLikelyTtsEventName(name: string): boolean {
+  const shortName = name.split(/[.:]/).at(-1) ?? name
+  return /^on[A-Z_]/u.test(shortName)
+}
+
+function getOfficialApiMember(
+  apiMembers: Map<string, apiManager.Member> | undefined,
+  name: string
+): apiManager.Member | undefined {
+  const shortName = name.split(/[.:]/).at(-1) ?? name
+  return apiMembers?.get(name) ?? apiMembers?.get(shortName)
+}
+
+function buildApiMembersLookup(api: apiManager.LuaAPI | undefined): Map<string, apiManager.Member> {
+  const lookup = new Map<string, apiManager.Member>()
+  for (const members of Object.values(api?.sections ?? {})) {
+    for (const member of members as apiManager.Member[]) {
+      lookup.set(member.name, member)
+      lookup.set(member.name.split(/[.:]/).at(-1) ?? member.name, member)
+    }
+  }
+  return lookup
+}
+
+function getDefinitionPatterns(): DefinitionPattern[] {
+  return [
+    {
+      regex: /^\s*local\s+function\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\)/,
+      kind: CompletionItemKind.Function,
+      isLocalDefinition: true,
+      hasParameters: true
+    },
+    {
+      regex: /^\s*function\s+([A-Za-z_][A-Za-z0-9_]*(?:[.:][A-Za-z_][A-Za-z0-9_]*)*)\s*\(([^)]*)\)/,
+      kind: CompletionItemKind.Function,
+      isLocalDefinition: false,
+      hasParameters: true
+    },
+    {
+      regex: /^\s*local\s+([A-Za-z_][A-Za-z0-9_]*)\s*=/,
+      kind: CompletionItemKind.Variable,
+      isLocalDefinition: true,
+      hasParameters: false
+    },
+    {
+      regex: /^\s*local\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*function\s*\(([^)]*)\)/,
+      kind: CompletionItemKind.Function,
+      isLocalDefinition: true,
+      hasParameters: true
+    },
+    {
+      regex:
+        /^\s*([A-Za-z_][A-Za-z0-9_]*(?:[.:][A-Za-z_][A-Za-z0-9_]*)*)\s*=\s*function\s*\(([^)]*)\)/,
+      kind: CompletionItemKind.Function,
+      isLocalDefinition: false,
+      hasParameters: true
+    },
+    {
+      regex: /^\s*([A-Za-z_][A-Za-z0-9_]*(?:[.:][A-Za-z_][A-Za-z0-9_]*)*)\s*=/,
+      kind: CompletionItemKind.Variable,
+      isLocalDefinition: false,
+      hasParameters: false
+    }
+  ]
+}
+
+function parseFunctionParameters(paramsRaw: string): string[] {
+  if (paramsRaw.trim() === '') return []
+  return paramsRaw
+    .split(',')
+    .map((param) => param.trim())
+    .filter((param) => param.length > 0)
+}
+
+function normalizeDocType(type: string | undefined): string | undefined {
+  if (type === undefined) return undefined
+  const normalized = type.trim().replace(/^\{/, '').replace(/\}$/, '').trim()
+  return normalized === '' ? undefined : normalized
+}
+
+function buildFunctionSnippet(name: string, params: string[]): SnippetString {
+  void params
+  return new SnippetString(name)
+}
+
+function getDocCommentMetadata(
+  lines: string[],
+  definitionLineIndex: number,
+  fallbackParameterNames: string[]
+): SymbolMetadata {
+  const docLines: string[] = []
+  for (let index = definitionLineIndex - 1; index >= 0; index--) {
+    const trimmedLine = lines[index].trim()
+    if (trimmedLine.startsWith('---')) {
+      docLines.unshift(trimmedLine.replace(/^---\s?/, ''))
+      continue
+    }
+    if (trimmedLine === '') continue
+    break
+  }
+
+  const metadata: SymbolMetadata = {
+    parameters: fallbackParameterNames.map((name) => ({ name }))
+  }
+
+  const descriptions: string[] = []
+  const paramsByName = new Map(metadata.parameters.map((parameter) => [parameter.name, parameter]))
+
+  for (const docLine of docLines) {
+    if (docLine.startsWith('@param')) {
+      const jsStyleMatch = docLine.match(
+        /^@param\s+\{([^}]+)\}\s+([A-Za-z_][A-Za-z0-9_]*)\s*(?:-\s*(.+))?$/u
+      )
+      const emmyStyleMatch = docLine.match(/^@param\s+([A-Za-z_][A-Za-z0-9_]*)\s+([^\s]+)\s*(.*)$/u)
+      const paramName = jsStyleMatch?.[2] ?? emmyStyleMatch?.[1]
+      if (paramName === undefined) continue
+      const parameter = paramsByName.get(paramName) ?? { name: paramName }
+      parameter.type = normalizeDocType(jsStyleMatch?.[1] ?? emmyStyleMatch?.[2]) ?? parameter.type
+      parameter.description = jsStyleMatch?.[3] ?? emmyStyleMatch?.[3] ?? parameter.description
+      if (!paramsByName.has(paramName)) {
+        metadata.parameters.push(parameter)
+        paramsByName.set(paramName, parameter)
+      }
+      continue
+    }
+
+    if (docLine.startsWith('@returns') || docLine.startsWith('@return')) {
+      const jsStyleMatch = docLine.match(/^@returns?\s+\{([^}]+)\}\s*(?:-\s*(.+))?$/u)
+      const emmyStyleMatch = docLine.match(/^@returns?\s+([^\s]+)\s*(.*)$/u)
+      metadata.returnType =
+        normalizeDocType(jsStyleMatch?.[1] ?? emmyStyleMatch?.[1]) ?? metadata.returnType
+      metadata.returnDescription =
+        jsStyleMatch?.[2] ?? emmyStyleMatch?.[2] ?? metadata.returnDescription
+      continue
+    }
+
+    if (docLine.startsWith('@export')) {
+      metadata.isExported = true
+      continue
+    }
+
+    if (docLine.startsWith('@deprecated')) {
+      metadata.isDeprecated = true
+      const deprecatedDescription = docLine.replace(/^@deprecated\s*/u, '').replace(/^-+\s*/u, '')
+      if (deprecatedDescription !== '') descriptions.push(`Deprecated: ${deprecatedDescription}`)
+      continue
+    }
+
+    if (!docLine.startsWith('@')) descriptions.push(docLine)
+  }
+
+  const description = descriptions.join('\n').trim()
+  metadata.description = description === '' ? undefined : description
+  return metadata
+}
+
+function buildTrackedFunctionDocumentation(
+  detail: string,
+  name: string,
+  metadata: SymbolMetadata,
+  officialMember?: apiManager.Member
+): MarkdownString {
+  const markdown = new MarkdownString()
+  const hasLocalDescription = metadata.description !== undefined
+  const hasLocalParameters = metadata.parameters.some(
+    (parameter) => parameter.type !== undefined || parameter.description !== undefined
+  )
+  const hasLocalReturns =
+    metadata.returnType !== undefined || metadata.returnDescription !== undefined
+  const hasAnyLocalDocumentation = hasLocalDescription || hasLocalParameters || hasLocalReturns
+  if (officialMember?.kind === 'event' || isLikelyTtsEventName(name)) {
+    markdown.appendMarkdown('**TTS Event**\n\n')
+  }
+  const signatureParams = metadata.parameters.map((parameter) => parameter.name).join(', ')
+  const returnSuffix =
+    metadata.returnType !== undefined ? ` -> ${normalizeDocType(metadata.returnType)}` : ''
+  markdown.appendMarkdown(
+    ['```lua', `function ${name}(${signatureParams})${returnSuffix}`, '```', ''].join('\n')
+  )
+
+  if (hasLocalDescription) {
+    markdown.appendMarkdown(`${metadata.description}\n\n`)
+  }
+
+  if (hasLocalParameters) {
+    markdown.appendMarkdown('**Parameters**\n')
+    for (const parameter of metadata.parameters) {
+      const parameterType =
+        normalizeDocType(parameter.type) !== undefined
+          ? `\`${normalizeDocType(parameter.type)}\` `
+          : ''
+      const parameterDescription =
+        parameter.description !== undefined && parameter.description !== ''
+          ? ` - ${parameter.description}`
+          : ''
+      markdown.appendMarkdown(
+        `- **\`${parameter.name}\`**: ${parameterType}${parameterDescription}`.trimEnd() + '\n'
+      )
+    }
+    markdown.appendMarkdown('\n')
+  }
+
+  if (hasLocalReturns) {
+    markdown.appendMarkdown('**Returns**\n')
+    const returnType =
+      metadata.returnType !== undefined
+        ? `\`${normalizeDocType(metadata.returnType)}\``
+        : '`unknown`'
+    const returnDescription =
+      metadata.returnDescription !== undefined && metadata.returnDescription !== ''
+        ? ` - ${metadata.returnDescription}`
+        : ''
+    markdown.appendMarkdown(`- ${returnType}${returnDescription}\n\n`)
+  }
+
+  if (officialMember !== undefined) {
+    if (hasAnyLocalDocumentation) markdown.appendMarkdown('\n')
+    markdown.appendMarkdown(`${officialMember.description}\n\n`)
+    if ((officialMember.parameters?.length ?? 0) > 0) {
+      markdown.appendMarkdown('**Parameters**\n')
+      for (const parameter of officialMember.parameters ?? []) {
+        const description = parameter.description !== undefined ? ` - ${parameter.description}` : ''
+        markdown.appendMarkdown(`- **${parameter.name}** \`${parameter.type}\`${description}\n`)
+      }
+      markdown.appendMarkdown('\n')
+    }
+    if ((officialMember.return_table?.length ?? 0) > 0) {
+      markdown.appendMarkdown('**Returns**\n')
+      for (const returnField of officialMember.return_table ?? []) {
+        const description =
+          returnField.description !== undefined ? ` - ${returnField.description}` : ''
+        markdown.appendMarkdown(`- \`${returnField.type}\`${description}\n`)
+      }
+      markdown.appendMarkdown('\n')
+    } else if (officialMember.type !== '') {
+      markdown.appendMarkdown(`**Returns** \`${officialMember.type}\`\n\n`)
+    }
+    markdown.appendMarkdown(`[Official Documentation](${officialMember.url})\n\n`)
+  }
+
+  markdown.appendMarkdown(`_${detail}_`)
+  return markdown
+}
+
+function getSymbolCompletionsFromSource(
+  source: string,
+  detail: string,
+  includeLocalDefinitions: boolean,
+  mode: SymbolCompletionMode = 'normal',
+  officialApiMembers?: Map<string, apiManager.Member>
+): CompletionItem[] {
+  const completions = new Map<string, CompletionItem>()
+  const lines = source.split(/\r?\n/)
+  const definitionPatterns = getDefinitionPatterns()
+
+  const addCompletion = (
+    name: string,
+    kind: CompletionItemKind,
+    metadata: SymbolMetadata = { parameters: [] }
+  ): void => {
+    if (mode === 'export-string' && metadata.isExported !== true) return
+    if (completions.has(name)) return
+    const officialMember = getOfficialApiMember(officialApiMembers, name)
+    const effectiveKind =
+      kind === CompletionItemKind.Function &&
+      (officialMember?.kind === 'event' || isLikelyTtsEventName(name))
+        ? CompletionItemKind.Event
+        : kind
+    const functionParameterNames = metadata.parameters.map((parameter) => parameter.name)
+    const completion = new CompletionItem(
+      mode === 'normal' &&
+        (effectiveKind === CompletionItemKind.Function ||
+          effectiveKind === CompletionItemKind.Event)
+        ? {
+            label: name,
+            description:
+              metadata.returnType ??
+              (effectiveKind === CompletionItemKind.Event ? 'event' : 'function'),
+            detail: `(${functionParameterNames.join(', ')})`
+          }
+        : name,
+      effectiveKind
+    )
+    completion.detail =
+      effectiveKind === CompletionItemKind.Event ? `${detail} · TTS event` : detail
+    completion.sortText = `0_local_${name}`
+    if (
+      mode === 'normal' &&
+      (effectiveKind === CompletionItemKind.Function || effectiveKind === CompletionItemKind.Event)
+    ) {
+      completion.insertText = buildFunctionSnippet(name, functionParameterNames)
+      completion.documentation = buildTrackedFunctionDocumentation(
+        detail,
+        name,
+        metadata,
+        officialMember
+      )
+    } else if (mode === 'export-string') {
+      completion.insertText = name
+      completion.documentation = buildTrackedFunctionDocumentation(
+        detail,
+        name,
+        metadata,
+        officialMember
+      )
+    }
+    if (metadata.isDeprecated === true) {
+      completion.tags = [CompletionItemTag.Deprecated]
+    }
+    completions.set(name, completion)
+  }
+
+  lines.forEach((line, lineIndex) => {
+    for (const pattern of definitionPatterns) {
+      if (!includeLocalDefinitions && pattern.isLocalDefinition) continue
+      const match = line.match(pattern.regex)
+      const fullName = match?.[1]
+      if (fullName === undefined) continue
+      const parsedParameters = pattern.hasParameters
+        ? parseFunctionParameters(match?.[2] ?? '')
+        : []
+      const docMetadata = getDocCommentMetadata(lines, lineIndex, parsedParameters)
+      const metadata: SymbolMetadata = {
+        ...docMetadata,
+        parameters:
+          docMetadata.parameters.length > 0
+            ? docMetadata.parameters
+            : parsedParameters.map((name) => ({ name }))
+      }
+      addCompletion(fullName, pattern.kind, metadata)
+      const tailName = fullName.split(/[.:]/).at(-1)
+      if (tailName !== undefined) addCompletion(tailName, pattern.kind, metadata)
+    }
+  })
+
+  return [...completions.values()]
+}
+
+function getRequiredModuleNames(source: string): string[] {
+  const modules = new Set<string>()
+  const requireRegex = /require\s*\(\s*["']([^"']+)["']\s*\)/g
+  for (const match of source.matchAll(requireRegex)) {
+    const moduleName = match[1]?.trim()
+    if (moduleName !== undefined && moduleName !== '') modules.add(moduleName)
+  }
+  return [...modules]
+}
+
+async function getRequiredModuleCompletions(
+  source: string,
+  depth = 0,
+  visited = new Set<string>(),
+  mode: SymbolCompletionMode = 'normal',
+  officialApiMembers?: Map<string, apiManager.Member>
+): Promise<CompletionItem[]> {
+  if (depth > 2) return []
+  const moduleNames = getRequiredModuleNames(source)
+  const merged: CompletionItem[] = []
+  for (const moduleName of moduleNames) {
+    try {
+      const moduleUri = await locateModule(moduleName)
+      const modulePathKey = moduleUri.fsPath
+      if (visited.has(modulePathKey)) continue
+      visited.add(modulePathKey)
+
+      const moduleSource = new TextDecoder().decode(await workspace.fs.readFile(moduleUri))
+      const moduleItems = getSymbolCompletionsFromSource(
+        moduleSource,
+        `Definition in required module: ${moduleName}`,
+        true,
+        mode,
+        officialApiMembers
+      )
+      mergeWithDocumentSymbols(merged, moduleItems)
+
+      const nestedModuleItems = await getRequiredModuleCompletions(
+        moduleSource,
+        depth + 1,
+        visited,
+        mode,
+        officialApiMembers
+      )
+      mergeWithDocumentSymbols(merged, nestedModuleItems)
+    } catch (error) {
+      logger.debug(`Failed to collect required module definitions for "${moduleName}"`, error)
+    }
+  }
+  return merged
+}
+
+function mergeWithDocumentSymbols(
+  baseItems: CompletionItem[],
+  symbolItems: CompletionItem[]
+): CompletionItem[] {
+  const existingLabels = new Set(baseItems.map((item) => completionLabelToString(item.label)))
+  for (const symbolItem of symbolItems) {
+    const label = completionLabelToString(symbolItem.label)
+    if (!existingLabels.has(label)) baseItems.push(symbolItem)
+  }
+  return baseItems
+}
+
+function isObjectCallStringContext(line: string): boolean {
+  return /\b[A-Za-z_][A-Za-z0-9_]*\.call\(\s*["'][^"']*$/u.test(line)
+}
+
+function getDocTemplateSnippet(document: TextDocument, position: Position): CompletionItem[] {
+  const linePrefix = document.lineAt(position.line).text.substring(0, position.character).trim()
+  if (linePrefix !== '---') return []
+  const functionTemplateRegex = new RegExp(
+    [
+      '^(?:local\\s+function|function|(?:local\\s+)?',
+      '[A-Za-z_][A-Za-z0-9_.:]*\\s*=\\s*function)',
+      '\\s+?([A-Za-z_][A-Za-z0-9_.:]*)?\\s*\\(([^)]*)\\)'
+    ].join(''),
+    'u'
+  )
+
+  for (let lineIndex = position.line + 1; lineIndex < document.lineCount; lineIndex++) {
+    const nextLine = document.lineAt(lineIndex).text.trim()
+    if (nextLine === '') continue
+    const functionMatch = nextLine.match(functionTemplateRegex)
+    if (functionMatch === null) break
+    const params = parseFunctionParameters(functionMatch[2] ?? '')
+    const snippetBody = [
+      ' Description',
+      ...params.map((param) => `\n--- @param {any} ${param} - `),
+      '\n--- @returns {any} - '
+    ].join('')
+    const item = new CompletionItem('Generate docs comment', CompletionItemKind.Snippet)
+    item.insertText = new SnippetString(snippetBody)
+    item.sortText = '0_docs'
+    item.detail = 'Lua docs template'
+    return [item]
+  }
+  return []
 }
 
 enum LuaTokenType {
@@ -28,7 +504,7 @@ enum LuaTokenType {
  * @param lineTokens - The tokens returned by the grammar
  * @returns An array of tokens with the type property
  */
-function processLineTokens (lineTokens: LineToken[]): Array<LineToken & { type: number }> {
+function processLineTokens(lineTokens: LineToken[]): Array<LineToken & { type: number }> {
   type validEnclosures = '[' | '(' | ']' | ')'
   interface enclosureInfo {
     match: validEnclosures
@@ -79,12 +555,12 @@ function processLineTokens (lineTokens: LineToken[]): Array<LineToken & { type: 
 export default class luaCompletionProvider implements CompletionItemProvider {
   private luaCompletion: LuaCompletion | undefined
 
-  public async preload (): Promise<void> {
+  public async preload(): Promise<void> {
     const latestApi = await apiManager.loadApi()
     this.luaCompletion = new LuaCompletion(latestApi)
   }
 
-  public async provideCompletionItems (
+  public async provideCompletionItems(
     document: TextDocument,
     position: Position,
     _token: CancellationToken,
@@ -92,10 +568,48 @@ export default class luaCompletionProvider implements CompletionItemProvider {
   ): Promise<CompletionItem[] | CompletionList> {
     if (!getConfig<boolean>('autocompletion.luaEnabled')) return []
     if (this.luaCompletion === undefined) return []
+    const officialApiMembers = buildApiMembersLookup(this.luaCompletion.api)
+    const docTemplateCompletions = getDocTemplateSnippet(document, position)
+    if (docTemplateCompletions.length > 0) return docTemplateCompletions
+    const documentSymbolCompletions = getSymbolCompletionsFromSource(
+      document.getText(),
+      'Definition in current file',
+      true,
+      'normal',
+      officialApiMembers
+    )
+    const requiredSymbolCompletions = await getRequiredModuleCompletions(
+      document.getText(),
+      0,
+      new Set<string>(),
+      'normal',
+      officialApiMembers
+    )
+    const trackedSymbolCompletions = mergeWithDocumentSymbols(
+      documentSymbolCompletions,
+      requiredSymbolCompletions
+    )
     const line = document.lineAt(position).text.substring(0, position.character)
+    if (isObjectCallStringContext(line)) {
+      const exportedDocumentSymbols = getSymbolCompletionsFromSource(
+        document.getText(),
+        'Exported definition in current file',
+        true,
+        'export-string',
+        officialApiMembers
+      )
+      const exportedRequiredSymbols = await getRequiredModuleCompletions(
+        document.getText(),
+        0,
+        new Set<string>(),
+        'export-string',
+        officialApiMembers
+      )
+      return mergeWithDocumentSymbols(exportedDocumentSymbols, exportedRequiredSymbols)
+    }
     const token = hs.getScopeAt(document, position)
     if (token === null) {
-      console.error('HyperScope returned undefined token')
+      logger.error('HyperScope returned undefined token')
       return []
     }
 
@@ -106,28 +620,34 @@ export default class luaCompletionProvider implements CompletionItemProvider {
       'string.quoted.single.lua', // Skip strings
       'comment.line.double-dash.lua' // Skip comments
     ]
-    if (skippedScopes.some(v => token.scopes.includes(v))) return []
+    if (skippedScopes.some((v) => token.scopes.includes(v))) return []
 
     // Short circuit some common lua keywords
     if (
-      (line.match(/(^|\s)else$/) != null) ||
-      (line.match(/(^|\s)elseif$/) != null) ||
-      (line.match(/(^|\s)end$/) != null)
-    ) return []
+      line.match(/(^|\s)else$/) != null ||
+      line.match(/(^|\s)elseif$/) != null ||
+      line.match(/(^|\s)end$/) != null
+    ) {
+      return []
+    }
     // If we're in the middle of typing a number then suggest nothing on .
-    if (context.triggerCharacter === '.' && (token.text.match(/^[0-9]$/) != null)) return []
+    if (context.triggerCharacter === '.' && token.text.match(/^[0-9]$/) != null) return []
 
     // Syntactic Snippets -----------------------------------------------------------------------
 
     if (line.endsWith(' do')) return [snippet('do...end', 'do\n\t$0\nend')]
     if (line.endsWith(' repeat')) return [snippet('repeat...until', 'repeat\n\t$0\nuntil $1')]
-    if (line.endsWith(' then') && !line.includes('elseif')) { return [snippet('then...end', 'then\n\t$0\nend')] }
+    if (line.endsWith(' then') && !line.includes('elseif')) {
+      return [snippet('then...end', 'then\n\t$0\nend')]
+    }
 
     const functionIndex = line.indexOf('function ')
     const parenIndex = line.indexOf('(')
     if (functionIndex >= 0 && parenIndex > 0 && line.endsWith(')')) {
       let name = line.substring(functionIndex + 9, parenIndex).trimStart()
-      name = name.substring(name.lastIndexOf(' ') + 1) + getConfig<string>('autocompletion.coroutineSuffix')
+      name =
+        name.substring(name.lastIndexOf(' ') + 1) +
+        getConfig<string>('autocompletion.coroutineSuffix')
 
       const functionSnippets = [
         snippet('function...end', '\n\t$0\nend', '1st'),
@@ -147,13 +667,13 @@ export default class luaCompletionProvider implements CompletionItemProvider {
     // -------------------------------------- Tokenization --------------------------------------
     const grammar = await hs.getGrammar(token.scopes[0])
     if (grammar === null) {
-      console.error('HyperScope returned undefined grammar')
+      logger.error('HyperScope returned undefined grammar')
       return []
     }
     // Clever! We add an underscore to the end of the line to "peek" at the scope of what comes next
     const lineTokens: LineToken[] = grammar
       .tokenizeLine(line + '_', null)
-      .tokens.map(v => {
+      .tokens.map((v) => {
         return {
           value: (line + '_').substring(v.startIndex, v.endIndex),
           start: v.startIndex,
@@ -162,16 +682,18 @@ export default class luaCompletionProvider implements CompletionItemProvider {
         }
       })
       .reverse()
-      .filter(v => v.value !== '.' && v.value.trim().length !== 0)
-    const [currentToken, previousToken] = processLineTokens(lineTokens).filter(v => !v.value.endsWith('.'))
+      .filter((v) => v.value !== '.' && v.value.trim().length !== 0)
+    const [currentToken, previousToken] = processLineTokens(lineTokens).filter(
+      (v) => !v.value.endsWith('.')
+    )
 
     // -------------------------------------- Completion ----------------------------------------
     /**
-       * Completion of a line falls under one of the 3 following patterns:
-       * 1. We are writing something with no other info, we suggest the root (/) completion
-       * 2. We are writing something after a dot, we suggest the completion of the previous token
-       * 3. We are writing a function, we suggest eventbased completions
-       */
+     * Completion of a line falls under one of the 3 following patterns:
+     * 1. We are writing something with no other info, we suggest the root (/) completion
+     * 2. We are writing something after a dot, we suggest the completion of the previous token
+     * 3. We are writing a function, we suggest eventbased completions
+     */
 
     // 1. We started writing at root scope (most code will autocomplete here)
     if (
@@ -179,10 +701,12 @@ export default class luaCompletionProvider implements CompletionItemProvider {
       currentToken.scopes[1] !== undefined &&
       currentToken.scopes[1] === 'variable.other.lua'
     ) {
-      const completionItems: CompletionItem[] = Array.from(this.luaCompletion.completionStore.get('/') ?? [])
+      const completionItems: CompletionItem[] = Array.from(
+        this.luaCompletion.completionStore.get('/') ?? []
+      )
       // If there's an assignment, offer getObjectFromGUID with suffix
       if (line.includes('=')) {
-        const itemIndex = completionItems.findIndex(v =>
+        const itemIndex = completionItems.findIndex((v) =>
           (v.label as CompletionItemLabel).label.startsWith('getObjectFromGUID')
         )
         const id = line.match(/([^\s]+)\s*=[^=]*$/)
@@ -191,9 +715,7 @@ export default class luaCompletionProvider implements CompletionItemProvider {
           const cleanId = id[1].replace(/[^a-zA-Z0-9]/g, '')
           const guidSuffix = getConfig<string>('autocompletion.guidSuffix')
           // Deep Copy the completion item
-          const smartGetObjectFromGUID: CompletionItem = Object.create(
-            completionItems[itemIndex]
-          )
+          const smartGetObjectFromGUID: CompletionItem = Object.create(completionItems[itemIndex])
           // Replace the snippet with the new one
           smartGetObjectFromGUID.label = `getObjectFromGUID(->${cleanId}${guidSuffix})`
           smartGetObjectFromGUID.insertText = new SnippetString(
@@ -219,23 +741,33 @@ export default class luaCompletionProvider implements CompletionItemProvider {
         // })
         // completionItems.push(...guidCompletionItems)
       }
-      return completionItems
+      return mergeWithDocumentSymbols(completionItems, trackedSymbolCompletions)
     }
 
     // 2. Writing something after a dot
     if (currentToken.scopes[1] === 'entity.other.attribute.lua') {
-      console.log('Returning object completion')
+      logger.debug('Returning object completion')
       switch (previousToken?.type) {
         case LuaTokenType.SCALAR:
-          if (previousToken.value === 'Player') return this.luaCompletion.completionStore.get('PlayerManager') ?? []
-          if (previousToken.value.endsWith('game_object')) return this.luaCompletion.completionStore.get('GameObject') ?? []
-          if (previousToken.value.endsWith('material')) return this.luaCompletion.completionStore.get('Material') ?? []
+          if (previousToken.value === 'Player') {
+            return this.luaCompletion.completionStore.get('PlayerManager') ?? []
+          }
+          if (previousToken.value.endsWith('game_object')) {
+            return this.luaCompletion.completionStore.get('GameObject') ?? []
+          }
+          if (previousToken.value.endsWith('material')) {
+            return this.luaCompletion.completionStore.get('Material') ?? []
+          }
           break
         case LuaTokenType.TABLE:
-          if (previousToken.value === 'Player') return this.luaCompletion.completionStore.get('PlayerInstance') ?? []
+          if (previousToken.value === 'Player') {
+            return this.luaCompletion.completionStore.get('PlayerInstance') ?? []
+          }
           break
         case LuaTokenType.FUNCTION:
-          if (previousToken.value === 'getComponent') return this.luaCompletion.completionStore.get('Component') ?? []
+          if (previousToken.value === 'getComponent') {
+            return this.luaCompletion.completionStore.get('Component') ?? []
+          }
       }
 
       if (previousToken !== undefined) {
@@ -245,7 +777,9 @@ export default class luaCompletionProvider implements CompletionItemProvider {
       // It's not named in the API => treat it as an Object.
       // Before adding the Object completions we'll check if the variable is named something
       // indicating a behavior, and if it is add those completions first.
-      const completionItems: CompletionItem[] = Array.from(this.luaCompletion.completionStore.get('Object') ?? [])
+      const completionItems: CompletionItem[] = Array.from(
+        this.luaCompletion.completionStore.get('Object') ?? []
+      )
       for (const b of this.luaCompletion.behaviourStore) {
         if (previousToken?.value.toLowerCase().endsWith(b.toLowerCase())) {
           const bCompletions = this.luaCompletion.completionStore.get(b) ?? []
@@ -259,11 +793,14 @@ export default class luaCompletionProvider implements CompletionItemProvider {
           break
         }
       }
-      return completionItems
+      return mergeWithDocumentSymbols(completionItems, trackedSymbolCompletions)
     }
 
     // 3. Either writing their own function, or looking for an event, so add the events
-    if (currentToken.scopes[2] !== undefined && currentToken.scopes[2] === 'entity.name.function.lua') {
+    if (
+      currentToken.scopes[2] !== undefined &&
+      currentToken.scopes[2] === 'entity.name.function.lua'
+    ) {
       // GlobalEvents already include universal event handlers, so we'll just return them
       if (document.fileName.endsWith('-1.lua') || document.fileName.endsWith('-1.ttslua')) {
         return this.luaCompletion.completionStore.get('GlobalEvents') ?? []
@@ -272,13 +809,24 @@ export default class luaCompletionProvider implements CompletionItemProvider {
       // The API does not make a distinction between global and universal events,
       // so we'll define the global events, and calculate the universal events
       // https://api.tabletopsimulator.com/events/#universal-event-handlers-summary
-      const globalEventHandlerLabels = ['onZoneGroupSort', 'tryObjectEnterContainer', 'tryObjectRandomize', 'tryObjectRotate']
-      const universalEventHandlers = this.luaCompletion.completionStore.get('GlobalEvents')?.filter(v =>
-      // GlobalEvents Completion Store minus the global event handlers = universal event handlers
-        !globalEventHandlerLabels.includes((v.label as CompletionItemLabel).label)
+      const globalEventHandlerLabels = [
+        'onZoneGroupSort',
+        'tryObjectEnterContainer',
+        'tryObjectRandomize',
+        'tryObjectRotate'
+      ]
+      const universalEventHandlers = this.luaCompletion.completionStore.get('GlobalEvents')?.filter(
+        (v) =>
+          // GlobalEvents Completion Store minus the global event handlers = universal event handlers
+          !globalEventHandlerLabels.includes((v.label as CompletionItemLabel).label)
       )
-      if (universalEventHandlers === undefined) throw new Error('Universal Event Handlers are undefined')
-      return universalEventHandlers.concat(this.luaCompletion.completionStore.get('ObjectEvents') ?? [])
+      if (universalEventHandlers === undefined) {
+        throw new Error('Universal Event Handlers are undefined')
+      }
+      return mergeWithDocumentSymbols(
+        universalEventHandlers.concat(this.luaCompletion.completionStore.get('ObjectEvents') ?? []),
+        trackedSymbolCompletions
+      )
     }
     return []
   }

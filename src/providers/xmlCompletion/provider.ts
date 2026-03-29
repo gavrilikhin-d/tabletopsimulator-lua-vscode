@@ -1,6 +1,9 @@
 import getConfig from '@/utils/getConfig'
 import {
-  type CompletionItem, type CompletionList, type Position, type TextDocument,
+  type CompletionItem,
+  type CompletionList,
+  type Position,
+  type TextDocument,
   type CompletionItemProvider
 } from 'vscode'
 import { type LineToken, hs } from '..'
@@ -12,7 +15,7 @@ import { XMLCompletion, type XMLAPI } from '.'
 export default class XMLCompletionProvider implements CompletionItemProvider {
   private xmlCompletion: XMLCompletion | undefined
 
-  public async preload (): Promise<void> {
+  public async preload(): Promise<void> {
     const extPath = LSS.get<string>('extensionPath')
     if (extPath === undefined) return
     const apiFs = new FileManager(join(extPath, 'assets/apis/userInterface.json'), false)
@@ -20,7 +23,7 @@ export default class XMLCompletionProvider implements CompletionItemProvider {
     this.xmlCompletion = new XMLCompletion(api)
   }
 
-  public async provideCompletionItems (
+  public async provideCompletionItems(
     document: TextDocument,
     position: Position
   ): Promise<CompletionItem[] | CompletionList<CompletionItem>> {
@@ -36,9 +39,10 @@ export default class XMLCompletionProvider implements CompletionItemProvider {
     let ruleStack = null
     let lineTokens: LineToken[] = []
     for (let i = 0; i <= position.line; i++) {
-      const line = i !== position.line
-        ? document.lineAt(i).text
-        : document.lineAt(i).text.substring(0, position.character) + '_'
+      const line =
+        i !== position.line
+          ? document.lineAt(i).text
+          : document.lineAt(i).text.substring(0, position.character) + '_'
       const localTokens = grammar.tokenizeLine(line, ruleStack)
       for (const token of localTokens.tokens) {
         const value = line.substring(token.startIndex, token.endIndex)

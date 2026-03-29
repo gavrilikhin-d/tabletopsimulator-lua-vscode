@@ -1,11 +1,11 @@
-import { ThemeIcon, TreeItem, TreeItemCollapsibleState, window } from 'vscode'
+import { TreeItem, TreeItemCollapsibleState } from 'vscode'
 import { type TTSObject } from '@tts-tools/savefile'
 // export type TTSItem = TTSObjectItem | TTSScriptItem | TTSFiletItem
 
 export type TTSItem = TTSObjectItem
 
 export class TTSObjectItem extends TreeItem {
-  constructor (object: TTSObject) {
+  constructor(object: TTSObject) {
     super(object.Name, TreeItemCollapsibleState.Collapsed)
   }
 }

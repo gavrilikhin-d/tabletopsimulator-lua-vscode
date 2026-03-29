@@ -24,19 +24,22 @@ export class XMLCompletion {
   public readonly elementStore: CompletionItem[] = []
   public readonly attributeStore = new Map<string, CompletionItem[]>()
 
-  constructor (public api: XMLAPI) {
+  constructor(public api: XMLAPI) {
     for (const element of api.elements) {
       this.elementStore.push(this.addElement(element))
       this.attributeStore.set(element.name, this.addAttributes(element))
     }
   }
 
-  private addElement (elem: Element): CompletionItem {
+  private addElement(elem: Element): CompletionItem {
     const cItem = new CompletionItem({
       label: elem.name,
       description: 'Element'
     })
-    const docString = new MarkdownString(`<p>${elem.description}</p><p><a href="${elem.url}">Official Documentation $(link-external)</a></p>`, true)
+    const docString = new MarkdownString(
+      `<p>${elem.description}</p><p><a href="${elem.url}">Official Documentation $(link-external)</a></p>`,
+      true
+    )
     docString.isTrusted = true
     docString.supportHtml = true
     cItem.documentation = docString
@@ -44,7 +47,7 @@ export class XMLCompletion {
     return cItem
   }
 
-  private addAttributes ({ name, attributes: attrs }: Element): CompletionItem[] {
+  private addAttributes({ name, attributes: attrs }: Element): CompletionItem[] {
     const cItems: CompletionItem[] = []
     for (const attr of attrs) {
       const cItem = new CompletionItem({

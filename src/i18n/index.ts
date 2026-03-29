@@ -8,7 +8,7 @@ loadAllLocales()
 const locale: Locales = getConfig('misc.locale')
 let L: TranslationFunctions = i18n()[locale]
 
-export async function switchLocale (locale: Locales): Promise<void> {
+export async function switchLocale(locale: Locales): Promise<void> {
   L = i18n()[locale]
 }
 

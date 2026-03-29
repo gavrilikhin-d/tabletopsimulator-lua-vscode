@@ -8,6 +8,7 @@
 import { Disposable } from 'vscode'
 import EditorApi from './CustomExternalEditorApi'
 import listeners from './eventManager'
+import { logger } from '@/vscode/logger'
 
 export default class TTSService {
   // Singleton Pattern
@@ -20,31 +21,33 @@ export default class TTSService {
   private readonly disposables: Disposable[]
 
   // Register listeners and create the API
-  private constructor () {
+  private constructor() {
     this.api = new EditorApi()
-    this.disposables = listeners.map(l => new Disposable(this.api.on(l.eventName, l.handler)))
-    this.disposables.push(new Disposable(() => {
-      this.disposables.forEach(d => d.dispose())
-      this.api.close()
-      console.log('TTSService Resources Freed')
-    }))
+    this.disposables = listeners.map((l) => new Disposable(this.api.on(l.eventName, l.handler)))
+    this.disposables.push(
+      new Disposable(() => {
+        this.disposables.forEach((d) => d.dispose())
+        this.api.close()
+        logger.info('TTSService Resources Freed')
+      })
+    )
   }
 
   // Singleton Pattern and Guardrail
-  public static getInstance (): TTSService {
+  public static getInstance(): TTSService {
     if (TTSService.instance === undefined) TTSService.instance = new TTSService()
     else if (!TTSService.instance.ready) throw new Error('TTSService is not ready yet')
     return TTSService.instance
   }
 
   // Open the service and return the disposables
-  public async open (): Promise<Disposable[]> {
+  public async open(): Promise<Disposable[]> {
     await this.api.listen()
     this.ready = true
     return this.disposables
   }
 
-  public static getApi (): EditorApi {
+  public static getApi(): EditorApi {
     return TTSService.getInstance().api
   }
 }
