@@ -7,6 +7,8 @@ import { type Disposable, languages, extensions, window, commands } from 'vscode
 import { type HScopesAPI } from './hscopes'
 // Completion Providers
 import LuaCompletionProvider from './luaCompletion/provider'
+import LuaSignatureHelpProvider from './luaSignatureHelp'
+import LuaDocSemanticTokensProvider, { luaDocSemanticTokensLegend } from './luaDocSemanticTokens'
 import XMLCompletionProvider from './xmlCompletion/provider'
 // Definition Providers
 import { LuaDefinitionProvider } from './luaDefinition'
@@ -18,7 +20,7 @@ import TTSElementTreeDataProvider from './elementTreeData'
 export const virtualDocumentContents = new Map<string, string>()
 export let hs: HScopesAPI
 export const triggers: Record<string, string[]> = {
-  lua: ['.', ':', '(', ')', ' '],
+  lua: ['.', ':', '(', ')', ' ', '-'],
   xml: ['<', '/', ' ']
 }
 
@@ -31,12 +33,16 @@ export interface LineToken {
 
 const [
   luaCompletionProvider,
+  luaSignatureHelpProvider,
+  luaDocSemanticTokensProvider,
   xmlCompletionProvider,
   luaHoverProvider,
   luaDefinitionProvider,
   ttsElementTreeDataProvider
 ] = [
   new LuaCompletionProvider(),
+  new LuaSignatureHelpProvider(),
+  new LuaDocSemanticTokensProvider(),
   new XMLCompletionProvider(),
   new LuaHoverProvider(),
   new LuaDefinitionProvider(),
@@ -66,12 +72,20 @@ export default function registerProviders(): Disposable[] {
     }
     throw err
   })
+  void luaSignatureHelpProvider.preload()
+  void luaHoverProvider.preload()
   commands.registerCommand('ttslua.refresh', () => {
     ttsElementTreeDataProvider.refresh()
   })
   return [
     languages.registerDefinitionProvider('lua', luaDefinitionProvider),
     languages.registerHoverProvider('lua', luaHoverProvider),
+    languages.registerSignatureHelpProvider('lua', luaSignatureHelpProvider, '(', ','),
+    languages.registerDocumentSemanticTokensProvider(
+      'lua',
+      luaDocSemanticTokensProvider,
+      luaDocSemanticTokensLegend
+    ),
     languages.registerCompletionItemProvider('xml', xmlCompletionProvider, ...triggers.xml),
     languages.registerCompletionItemProvider('lua', luaCompletionProvider, ...triggers.lua),
     window.registerTreeDataProvider('ttslua-explorer', ttsElementTreeDataProvider)
