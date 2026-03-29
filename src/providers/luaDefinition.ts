@@ -169,7 +169,7 @@ export class LuaDefinitionProvider implements DefinitionProvider {
         visited.add(moduleUri.fsPath)
 
         const moduleSource = new TextDecoder().decode(await workspace.fs.readFile(moduleUri))
-        const moduleDefinitions = this.trackDefinitionsInSource(moduleSource, moduleUri, false)
+        const moduleDefinitions = this.trackDefinitionsInSource(moduleSource, moduleUri, true)
         this.mergeDefinitions(result, moduleDefinitions)
 
         const nestedDefinitions = await this.trackRequiredModuleDefinitions(

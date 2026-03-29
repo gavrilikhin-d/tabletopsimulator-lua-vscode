@@ -33,36 +33,95 @@ interface DefinitionPattern {
   regex: RegExp
   kind: CompletionItemKind
   isLocalDefinition: boolean
+  hasParameters: boolean
+}
+
+interface SymbolMetadata {
+  parameters: string[]
+  returnType?: string
 }
 
 function getDefinitionPatterns(): DefinitionPattern[] {
   return [
     {
-      regex: /^\s*local\s+function\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(/,
+      regex: /^\s*local\s+function\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\)/,
       kind: CompletionItemKind.Function,
-      isLocalDefinition: true
+      isLocalDefinition: true,
+      hasParameters: true
     },
     {
-      regex: /^\s*function\s+([A-Za-z_][A-Za-z0-9_]*(?:[.:][A-Za-z_][A-Za-z0-9_]*)*)\s*\(/,
+      regex: /^\s*function\s+([A-Za-z_][A-Za-z0-9_]*(?:[.:][A-Za-z_][A-Za-z0-9_]*)*)\s*\(([^)]*)\)/,
       kind: CompletionItemKind.Function,
-      isLocalDefinition: false
+      isLocalDefinition: false,
+      hasParameters: true
     },
     {
       regex: /^\s*local\s+([A-Za-z_][A-Za-z0-9_]*)\s*=/,
       kind: CompletionItemKind.Variable,
-      isLocalDefinition: true
+      isLocalDefinition: true,
+      hasParameters: false
     },
     {
-      regex: /^\s*([A-Za-z_][A-Za-z0-9_]*(?:[.:][A-Za-z_][A-Za-z0-9_]*)*)\s*=\s*function\s*\(/,
+      regex: /^\s*local\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*function\s*\(([^)]*)\)/,
       kind: CompletionItemKind.Function,
-      isLocalDefinition: false
+      isLocalDefinition: true,
+      hasParameters: true
+    },
+    {
+      regex: /^\s*([A-Za-z_][A-Za-z0-9_]*(?:[.:][A-Za-z_][A-Za-z0-9_]*)*)\s*=\s*function\s*\(([^)]*)\)/,
+      kind: CompletionItemKind.Function,
+      isLocalDefinition: false,
+      hasParameters: true
     },
     {
       regex: /^\s*([A-Za-z_][A-Za-z0-9_]*(?:[.:][A-Za-z_][A-Za-z0-9_]*)*)\s*=/,
       kind: CompletionItemKind.Variable,
-      isLocalDefinition: false
+      isLocalDefinition: false,
+      hasParameters: false
     }
   ]
+}
+
+function parseFunctionParameters(paramsRaw: string): string[] {
+  if (paramsRaw.trim() === '') return []
+  return paramsRaw
+    .split(',')
+    .map((param) => param.trim())
+    .filter((param) => param.length > 0)
+}
+
+function buildFunctionSnippet(name: string, params: string[]): SnippetString {
+  if (params.length === 0) return new SnippetString(`${name}()`)
+  const placeholders = params
+    .map((param, index) => `\${${index + 1}:${param}}`)
+    .join(', ')
+  return new SnippetString(`${name}(${placeholders})`)
+}
+
+function getAnnotationMetadata(lines: string[], definitionLineIndex: number): Partial<SymbolMetadata> {
+  const annotationLines: string[] = []
+  for (let index = definitionLineIndex - 1; index >= 0; index--) {
+    const trimmedLine = lines[index].trim()
+    if (trimmedLine.startsWith('---@')) {
+      annotationLines.unshift(trimmedLine)
+      continue
+    }
+    if (trimmedLine.startsWith('--')) continue
+    if (trimmedLine === '') continue
+    break
+  }
+
+  const annotatedParams = annotationLines
+    .map((line) => line.match(/^---@param\s+([A-Za-z_][A-Za-z0-9_]*)/u)?.[1])
+    .filter((value): value is string => value !== undefined)
+  const annotatedReturns = annotationLines
+    .map((line) => line.match(/^---@return\s+(.+)$/u)?.[1]?.trim())
+    .filter((value): value is string => value !== undefined && value !== '')
+
+  return {
+    parameters: annotatedParams.length > 0 ? annotatedParams : undefined,
+    returnType: annotatedReturns.length > 0 ? annotatedReturns.join(', ') : undefined
+  }
 }
 
 function getSymbolCompletionsFromSource(
@@ -74,25 +133,55 @@ function getSymbolCompletionsFromSource(
   const lines = source.split(/\r?\n/)
   const definitionPatterns = getDefinitionPatterns()
 
-  const addCompletion = (name: string, kind: CompletionItemKind): void => {
+  const addCompletion = (
+    name: string,
+    kind: CompletionItemKind,
+    metadata: SymbolMetadata = { parameters: [] }
+  ): void => {
     if (completions.has(name)) return
-    const completion = new CompletionItem(name, kind)
+    const functionSignature = `(${metadata.parameters.join(', ')})`
+    const completion = new CompletionItem(
+      kind === CompletionItemKind.Function
+        ? {
+            label: name,
+            description: metadata.returnType ?? 'function',
+            detail: functionSignature
+          }
+        : name,
+      kind
+    )
     completion.detail = detail
     completion.sortText = `0_local_${name}`
+    if (kind === CompletionItemKind.Function) {
+      completion.insertText = buildFunctionSnippet(name, metadata.parameters)
+      completion.documentation = [
+        `${detail}`,
+        `${name}${functionSignature}`,
+        metadata.returnType !== undefined ? `Returns: ${metadata.returnType}` : undefined
+      ]
+        .filter((value): value is string => value !== undefined)
+        .join('\n')
+    }
     completions.set(name, completion)
   }
 
-  for (const line of lines) {
+  lines.forEach((line, lineIndex) => {
     for (const pattern of definitionPatterns) {
       if (!includeLocalDefinitions && pattern.isLocalDefinition) continue
       const match = line.match(pattern.regex)
       const fullName = match?.[1]
       if (fullName === undefined) continue
-      addCompletion(fullName, pattern.kind)
+      const parsedParameters = pattern.hasParameters ? parseFunctionParameters(match?.[2] ?? '') : []
+      const annotationMetadata = getAnnotationMetadata(lines, lineIndex)
+      const metadata: SymbolMetadata = {
+        parameters: annotationMetadata.parameters ?? parsedParameters,
+        returnType: annotationMetadata.returnType
+      }
+      addCompletion(fullName, pattern.kind, metadata)
       const tailName = fullName.split(/[.:]/).at(-1)
-      if (tailName !== undefined) addCompletion(tailName, pattern.kind)
+      if (tailName !== undefined) addCompletion(tailName, pattern.kind, metadata)
     }
-  }
+  })
 
   return [...completions.values()]
 }
@@ -130,7 +219,7 @@ async function getRequiredModuleCompletions(
       const moduleItems = getSymbolCompletionsFromSource(
         moduleSource,
         `Definition in required module: ${moduleName}`,
-        false
+        true
       )
       mergeWithDocumentSymbols(merged, moduleItems)
 
