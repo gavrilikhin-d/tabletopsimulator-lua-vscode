@@ -9,18 +9,150 @@ import {
   type CompletionList,
   CompletionItemKind,
   SnippetString,
-  type CompletionItemLabel
+  type CompletionItemLabel,
+  workspace
 } from 'vscode'
 import { LuaCompletion } from '.'
 import * as apiManager from './apiManager'
 import { type LineToken, hs } from '..'
 import { logger } from '@/vscode/logger'
+import { locateModule } from '@/utils/moduleResolution'
 
 function snippet(label: string, insert: string, sortText = ''): CompletionItem {
   const result = new CompletionItem(label, CompletionItemKind.Snippet)
   result.insertText = new SnippetString(insert)
   result.sortText = sortText
   return result
+}
+
+function completionLabelToString(label: CompletionItem['label']): string {
+  return typeof label === 'string' ? label : label.label
+}
+
+interface DefinitionPattern {
+  regex: RegExp
+  kind: CompletionItemKind
+  isLocalDefinition: boolean
+}
+
+function getDefinitionPatterns(): DefinitionPattern[] {
+  return [
+    {
+      regex: /^\s*local\s+function\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(/,
+      kind: CompletionItemKind.Function,
+      isLocalDefinition: true
+    },
+    {
+      regex: /^\s*function\s+([A-Za-z_][A-Za-z0-9_]*(?:[.:][A-Za-z_][A-Za-z0-9_]*)*)\s*\(/,
+      kind: CompletionItemKind.Function,
+      isLocalDefinition: false
+    },
+    {
+      regex: /^\s*local\s+([A-Za-z_][A-Za-z0-9_]*)\s*=/,
+      kind: CompletionItemKind.Variable,
+      isLocalDefinition: true
+    },
+    {
+      regex: /^\s*([A-Za-z_][A-Za-z0-9_]*(?:[.:][A-Za-z_][A-Za-z0-9_]*)*)\s*=\s*function\s*\(/,
+      kind: CompletionItemKind.Function,
+      isLocalDefinition: false
+    },
+    {
+      regex: /^\s*([A-Za-z_][A-Za-z0-9_]*(?:[.:][A-Za-z_][A-Za-z0-9_]*)*)\s*=/,
+      kind: CompletionItemKind.Variable,
+      isLocalDefinition: false
+    }
+  ]
+}
+
+function getSymbolCompletionsFromSource(
+  source: string,
+  detail: string,
+  includeLocalDefinitions: boolean
+): CompletionItem[] {
+  const completions = new Map<string, CompletionItem>()
+  const lines = source.split(/\r?\n/)
+  const definitionPatterns = getDefinitionPatterns()
+
+  const addCompletion = (name: string, kind: CompletionItemKind): void => {
+    if (completions.has(name)) return
+    const completion = new CompletionItem(name, kind)
+    completion.detail = detail
+    completion.sortText = `0_local_${name}`
+    completions.set(name, completion)
+  }
+
+  for (const line of lines) {
+    for (const pattern of definitionPatterns) {
+      if (!includeLocalDefinitions && pattern.isLocalDefinition) continue
+      const match = line.match(pattern.regex)
+      const fullName = match?.[1]
+      if (fullName === undefined) continue
+      addCompletion(fullName, pattern.kind)
+      const tailName = fullName.split(/[.:]/).at(-1)
+      if (tailName !== undefined) addCompletion(tailName, pattern.kind)
+    }
+  }
+
+  return [...completions.values()]
+}
+
+function getDocumentSymbolCompletions(document: TextDocument): CompletionItem[] {
+  return getSymbolCompletionsFromSource(document.getText(), 'Definition in current file', true)
+}
+
+function getRequiredModuleNames(source: string): string[] {
+  const modules = new Set<string>()
+  const requireRegex = /require\s*\(\s*["']([^"']+)["']\s*\)/g
+  for (const match of source.matchAll(requireRegex)) {
+    const moduleName = match[1]?.trim()
+    if (moduleName !== undefined && moduleName !== '') modules.add(moduleName)
+  }
+  return [...modules]
+}
+
+async function getRequiredModuleCompletions(
+  source: string,
+  depth = 0,
+  visited = new Set<string>()
+): Promise<CompletionItem[]> {
+  if (depth > 2) return []
+  const moduleNames = getRequiredModuleNames(source)
+  const merged: CompletionItem[] = []
+  for (const moduleName of moduleNames) {
+    try {
+      const moduleUri = await locateModule(moduleName)
+      const modulePathKey = moduleUri.fsPath
+      if (visited.has(modulePathKey)) continue
+      visited.add(modulePathKey)
+
+      const moduleSource = new TextDecoder().decode(await workspace.fs.readFile(moduleUri))
+      const moduleItems = getSymbolCompletionsFromSource(
+        moduleSource,
+        `Definition in required module: ${moduleName}`,
+        false
+      )
+      mergeWithDocumentSymbols(merged, moduleItems)
+
+      const nestedModuleItems = await getRequiredModuleCompletions(moduleSource, depth + 1, visited)
+      mergeWithDocumentSymbols(merged, nestedModuleItems)
+    } catch (error) {
+      logger.debug(`Failed to collect required module definitions for "${moduleName}"`, error)
+    }
+  }
+  return merged
+}
+
+function mergeWithDocumentSymbols(
+  baseItems: CompletionItem[],
+  symbolItems: CompletionItem[]
+): CompletionItem[] {
+  const existingLabels = new Set(baseItems.map((item) => completionLabelToString(item.label)))
+  for (const symbolItem of symbolItems) {
+    const label = completionLabelToString(symbolItem.label)
+    if (!existingLabels.has(label)) baseItems.push(symbolItem)
+  }
+  return baseItems
 }
 
 enum LuaTokenType {
@@ -100,6 +232,12 @@ export default class luaCompletionProvider implements CompletionItemProvider {
   ): Promise<CompletionItem[] | CompletionList> {
     if (!getConfig<boolean>('autocompletion.luaEnabled')) return []
     if (this.luaCompletion === undefined) return []
+    const documentSymbolCompletions = getDocumentSymbolCompletions(document)
+    const requiredSymbolCompletions = await getRequiredModuleCompletions(document.getText())
+    const trackedSymbolCompletions = mergeWithDocumentSymbols(
+      documentSymbolCompletions,
+      requiredSymbolCompletions
+    )
     const line = document.lineAt(position).text.substring(0, position.character)
     const token = hs.getScopeAt(document, position)
     if (token === null) {
@@ -235,7 +373,7 @@ export default class luaCompletionProvider implements CompletionItemProvider {
         // })
         // completionItems.push(...guidCompletionItems)
       }
-      return completionItems
+      return mergeWithDocumentSymbols(completionItems, trackedSymbolCompletions)
     }
 
     // 2. Writing something after a dot
@@ -287,7 +425,7 @@ export default class luaCompletionProvider implements CompletionItemProvider {
           break
         }
       }
-      return completionItems
+      return mergeWithDocumentSymbols(completionItems, trackedSymbolCompletions)
     }
 
     // 3. Either writing their own function, or looking for an event, so add the events
@@ -317,8 +455,9 @@ export default class luaCompletionProvider implements CompletionItemProvider {
       if (universalEventHandlers === undefined) {
         throw new Error('Universal Event Handlers are undefined')
       }
-      return universalEventHandlers.concat(
-        this.luaCompletion.completionStore.get('ObjectEvents') ?? []
+      return mergeWithDocumentSymbols(
+        universalEventHandlers.concat(this.luaCompletion.completionStore.get('ObjectEvents') ?? []),
+        trackedSymbolCompletions
       )
     }
     return []
