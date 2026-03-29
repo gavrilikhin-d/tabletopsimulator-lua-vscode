@@ -20,10 +20,12 @@ import { initWorkspace } from '@/vscode/workspaceManager'
 import registerProviders from '@/providers'
 import L from '@/i18n'
 import TTSConsolePanel from '@/TTSConsole'
+import { logger } from '@/vscode/logger'
 
 export async function activate(context: ExtensionContext): Promise<void> {
+  logger.init(context)
   // L is the i18n object, which is used to get localized strings
-  console.info(L.activation())
+  logger.info(L.activation())
 
   // Storage is a persistent storage the extension uses for settings and state across sessions
   state.setStorageRef(context.globalState, context.globalStorageUri)

@@ -8,6 +8,7 @@
 import { Disposable } from 'vscode'
 import EditorApi from './CustomExternalEditorApi'
 import listeners from './eventManager'
+import { logger } from '@/vscode/logger'
 
 export default class TTSService {
   // Singleton Pattern
@@ -27,7 +28,7 @@ export default class TTSService {
       new Disposable(() => {
         this.disposables.forEach((d) => d.dispose())
         this.api.close()
-        console.log('TTSService Resources Freed')
+        logger.info('TTSService Resources Freed')
       })
     )
   }

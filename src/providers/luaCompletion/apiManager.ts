@@ -11,6 +11,7 @@ import { quickStatus } from '@/vscode/statusBarManager'
 import { join } from 'path'
 import FileManager from '@/vscode/fileManager'
 import { compare } from 'compare-versions'
+import { logger } from '@/vscode/logger'
 
 interface Basic {
   name: string
@@ -54,7 +55,7 @@ export async function loadApi(): Promise<LuaAPI> {
     const remoteApi = (await res.json()) as LuaAPI
     if (compare(remoteApi.version, shippedApi.version, '>')) {
       await LSS.write(defaultDownloadedApiPath, JSON.stringify(remoteApi, undefined, 2))
-      quickStatus(`TTS Lua API Updated to ${remoteApi.version}`)
+      logger.debug(`TTS Lua API Updated to ${remoteApi.version}`)
       return remoteApi
     }
   } catch {
@@ -62,6 +63,6 @@ export async function loadApi(): Promise<LuaAPI> {
   }
 
   await LSS.write(defaultDownloadedApiPath, JSON.stringify(shippedApi, undefined, 2))
-  quickStatus(`TTS Lua API Loaded from Extension: ${shippedApi.version}`)
+  logger.debug(`TTS Lua API Loaded from Extension: ${shippedApi.version}`)
   return shippedApi
 }

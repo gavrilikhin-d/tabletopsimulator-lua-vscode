@@ -7,6 +7,7 @@ import { type SaveFile, embedSave } from '@tts-tools/savefile'
 import docsFolder from '@/utils/docsFolder'
 import normalizeTtsSavePath from '@/utils/normalizeTtsSavePath'
 import { type OutgoingJsonObject } from '@matanlurey/tts-editor'
+import { logger } from '@/vscode/logger'
 
 export default async function saveAndPlay(): Promise<void> {
   // When sending scripts, the workdir must be present in workspace
@@ -27,7 +28,7 @@ export default async function saveAndPlay(): Promise<void> {
       includePath: [getWorkDir().fsPath, docsFolder]
     })
   } catch (e) {
-    console.error(e)
+    logger.error(e)
     throw new Error('Failed to embed save')
   }
   await saveFs.write(JSON.stringify(saveFile, null, 2))
