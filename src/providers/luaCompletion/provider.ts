@@ -8,6 +8,8 @@ import {
   CompletionItem,
   type CompletionList,
   CompletionItemKind,
+  CompletionItemTag,
+  MarkdownString,
   SnippetString,
   type CompletionItemLabel,
   workspace
@@ -37,9 +39,19 @@ interface DefinitionPattern {
 }
 
 interface SymbolMetadata {
-  parameters: string[]
+  parameters: Array<{
+    name: string
+    type?: string
+    description?: string
+  }>
   returnType?: string
+  returnDescription?: string
+  description?: string
+  isExported?: boolean
+  isDeprecated?: boolean
 }
+
+type SymbolCompletionMode = 'normal' | 'export-string'
 
 function getDefinitionPatterns(): DefinitionPattern[] {
   return [
@@ -68,7 +80,8 @@ function getDefinitionPatterns(): DefinitionPattern[] {
       hasParameters: true
     },
     {
-      regex: /^\s*([A-Za-z_][A-Za-z0-9_]*(?:[.:][A-Za-z_][A-Za-z0-9_]*)*)\s*=\s*function\s*\(([^)]*)\)/,
+      regex:
+        /^\s*([A-Za-z_][A-Za-z0-9_]*(?:[.:][A-Za-z_][A-Za-z0-9_]*)*)\s*=\s*function\s*\(([^)]*)\)/,
       kind: CompletionItemKind.Function,
       isLocalDefinition: false,
       hasParameters: true
@@ -90,44 +103,150 @@ function parseFunctionParameters(paramsRaw: string): string[] {
     .filter((param) => param.length > 0)
 }
 
-function buildFunctionSnippet(name: string, params: string[]): SnippetString {
-  if (params.length === 0) return new SnippetString(`${name}()`)
-  const placeholders = params
-    .map((param, index) => `\${${index + 1}:${param}}`)
-    .join(', ')
-  return new SnippetString(`${name}(${placeholders})`)
+function normalizeDocType(type: string | undefined): string | undefined {
+  if (type === undefined) return undefined
+  const normalized = type.trim().replace(/^\{/, '').replace(/\}$/, '').trim()
+  return normalized === '' ? undefined : normalized
 }
 
-function getAnnotationMetadata(lines: string[], definitionLineIndex: number): Partial<SymbolMetadata> {
-  const annotationLines: string[] = []
+function buildFunctionSnippet(name: string, params: string[]): SnippetString {
+  void params
+  return new SnippetString(name)
+}
+
+function getDocCommentMetadata(
+  lines: string[],
+  definitionLineIndex: number,
+  fallbackParameterNames: string[]
+): SymbolMetadata {
+  const docLines: string[] = []
   for (let index = definitionLineIndex - 1; index >= 0; index--) {
     const trimmedLine = lines[index].trim()
-    if (trimmedLine.startsWith('---@')) {
-      annotationLines.unshift(trimmedLine)
+    if (trimmedLine.startsWith('---')) {
+      docLines.unshift(trimmedLine.replace(/^---\s?/, ''))
       continue
     }
-    if (trimmedLine.startsWith('--')) continue
     if (trimmedLine === '') continue
     break
   }
 
-  const annotatedParams = annotationLines
-    .map((line) => line.match(/^---@param\s+([A-Za-z_][A-Za-z0-9_]*)/u)?.[1])
-    .filter((value): value is string => value !== undefined)
-  const annotatedReturns = annotationLines
-    .map((line) => line.match(/^---@return\s+(.+)$/u)?.[1]?.trim())
-    .filter((value): value is string => value !== undefined && value !== '')
-
-  return {
-    parameters: annotatedParams.length > 0 ? annotatedParams : undefined,
-    returnType: annotatedReturns.length > 0 ? annotatedReturns.join(', ') : undefined
+  const metadata: SymbolMetadata = {
+    parameters: fallbackParameterNames.map((name) => ({ name }))
   }
+
+  const descriptions: string[] = []
+  const paramsByName = new Map(metadata.parameters.map((parameter) => [parameter.name, parameter]))
+
+  for (const docLine of docLines) {
+    if (docLine.startsWith('@param')) {
+      const jsStyleMatch = docLine.match(
+        /^@param\s+\{([^}]+)\}\s+([A-Za-z_][A-Za-z0-9_]*)\s*(?:-\s*(.+))?$/u
+      )
+      const emmyStyleMatch = docLine.match(/^@param\s+([A-Za-z_][A-Za-z0-9_]*)\s+([^\s]+)\s*(.*)$/u)
+      const paramName = jsStyleMatch?.[2] ?? emmyStyleMatch?.[1]
+      if (paramName === undefined) continue
+      const parameter = paramsByName.get(paramName) ?? { name: paramName }
+      parameter.type = normalizeDocType(jsStyleMatch?.[1] ?? emmyStyleMatch?.[2]) ?? parameter.type
+      parameter.description = jsStyleMatch?.[3] ?? emmyStyleMatch?.[3] ?? parameter.description
+      if (!paramsByName.has(paramName)) {
+        metadata.parameters.push(parameter)
+        paramsByName.set(paramName, parameter)
+      }
+      continue
+    }
+
+    if (docLine.startsWith('@returns') || docLine.startsWith('@return')) {
+      const jsStyleMatch = docLine.match(/^@returns?\s+\{([^}]+)\}\s*(?:-\s*(.+))?$/u)
+      const emmyStyleMatch = docLine.match(/^@returns?\s+([^\s]+)\s*(.*)$/u)
+      metadata.returnType =
+        normalizeDocType(jsStyleMatch?.[1] ?? emmyStyleMatch?.[1]) ?? metadata.returnType
+      metadata.returnDescription =
+        jsStyleMatch?.[2] ?? emmyStyleMatch?.[2] ?? metadata.returnDescription
+      continue
+    }
+
+    if (docLine.startsWith('@export')) {
+      metadata.isExported = true
+      continue
+    }
+
+    if (docLine.startsWith('@deprecated')) {
+      metadata.isDeprecated = true
+      const deprecatedDescription = docLine.replace(/^@deprecated\s*/u, '').replace(/^-+\s*/u, '')
+      if (deprecatedDescription !== '') descriptions.push(`Deprecated: ${deprecatedDescription}`)
+      continue
+    }
+
+    if (!docLine.startsWith('@')) descriptions.push(docLine)
+  }
+
+  const description = descriptions.join('\n').trim()
+  metadata.description = description === '' ? undefined : description
+  return metadata
+}
+
+function buildTrackedFunctionDocumentation(
+  detail: string,
+  name: string,
+  metadata: SymbolMetadata
+): MarkdownString {
+  const markdown = new MarkdownString()
+  const signature = `${name}(${metadata.parameters
+    .map((parameter) => {
+      const normalizedType = normalizeDocType(parameter.type)
+      return normalizedType !== undefined ? `${parameter.name}: ${normalizedType}` : parameter.name
+    })
+    .join(', ')})`
+  markdown.appendMarkdown(`### \`${signature}\``)
+  if (metadata.returnType !== undefined) {
+    markdown.appendMarkdown(` -> \`${normalizeDocType(metadata.returnType)}\``)
+  }
+  markdown.appendMarkdown('\n\n')
+
+  if (metadata.description !== undefined) {
+    markdown.appendMarkdown(`${metadata.description}\n\n`)
+  }
+
+  if (metadata.parameters.length > 0) {
+    markdown.appendMarkdown('**Parameters**\n')
+    for (const parameter of metadata.parameters) {
+      const parameterType =
+        normalizeDocType(parameter.type) !== undefined
+          ? `\`${normalizeDocType(parameter.type)}\` `
+          : ''
+      const parameterDescription =
+        parameter.description !== undefined && parameter.description !== ''
+          ? ` - ${parameter.description}`
+          : ''
+      markdown.appendMarkdown(
+        `- **\`${parameter.name}\`**: ${parameterType}${parameterDescription}`.trimEnd() + '\n'
+      )
+    }
+    markdown.appendMarkdown('\n')
+  }
+
+  if (metadata.returnType !== undefined || metadata.returnDescription !== undefined) {
+    markdown.appendMarkdown('**Returns**\n')
+    const returnType =
+      metadata.returnType !== undefined
+        ? `\`${normalizeDocType(metadata.returnType)}\``
+        : '`unknown`'
+    const returnDescription =
+      metadata.returnDescription !== undefined && metadata.returnDescription !== ''
+        ? ` - ${metadata.returnDescription}`
+        : ''
+    markdown.appendMarkdown(`- ${returnType}${returnDescription}\n\n`)
+  }
+
+  markdown.appendMarkdown(`_${detail}_`)
+  return markdown
 }
 
 function getSymbolCompletionsFromSource(
   source: string,
   detail: string,
-  includeLocalDefinitions: boolean
+  includeLocalDefinitions: boolean,
+  mode: SymbolCompletionMode = 'normal'
 ): CompletionItem[] {
   const completions = new Map<string, CompletionItem>()
   const lines = source.split(/\r?\n/)
@@ -138,29 +257,30 @@ function getSymbolCompletionsFromSource(
     kind: CompletionItemKind,
     metadata: SymbolMetadata = { parameters: [] }
   ): void => {
+    if (mode === 'export-string' && metadata.isExported !== true) return
     if (completions.has(name)) return
-    const functionSignature = `(${metadata.parameters.join(', ')})`
+    const functionParameterNames = metadata.parameters.map((parameter) => parameter.name)
     const completion = new CompletionItem(
-      kind === CompletionItemKind.Function
+      mode === 'normal' && kind === CompletionItemKind.Function
         ? {
             label: name,
             description: metadata.returnType ?? 'function',
-            detail: functionSignature
+            detail: `(${functionParameterNames.join(', ')})`
           }
         : name,
       kind
     )
     completion.detail = detail
     completion.sortText = `0_local_${name}`
-    if (kind === CompletionItemKind.Function) {
-      completion.insertText = buildFunctionSnippet(name, metadata.parameters)
-      completion.documentation = [
-        `${detail}`,
-        `${name}${functionSignature}`,
-        metadata.returnType !== undefined ? `Returns: ${metadata.returnType}` : undefined
-      ]
-        .filter((value): value is string => value !== undefined)
-        .join('\n')
+    if (mode === 'normal' && kind === CompletionItemKind.Function) {
+      completion.insertText = buildFunctionSnippet(name, functionParameterNames)
+      completion.documentation = buildTrackedFunctionDocumentation(detail, name, metadata)
+    } else if (mode === 'export-string') {
+      completion.insertText = name
+      completion.documentation = buildTrackedFunctionDocumentation(detail, name, metadata)
+    }
+    if (metadata.isDeprecated === true) {
+      completion.tags = [CompletionItemTag.Deprecated]
     }
     completions.set(name, completion)
   }
@@ -171,11 +291,16 @@ function getSymbolCompletionsFromSource(
       const match = line.match(pattern.regex)
       const fullName = match?.[1]
       if (fullName === undefined) continue
-      const parsedParameters = pattern.hasParameters ? parseFunctionParameters(match?.[2] ?? '') : []
-      const annotationMetadata = getAnnotationMetadata(lines, lineIndex)
+      const parsedParameters = pattern.hasParameters
+        ? parseFunctionParameters(match?.[2] ?? '')
+        : []
+      const docMetadata = getDocCommentMetadata(lines, lineIndex, parsedParameters)
       const metadata: SymbolMetadata = {
-        parameters: annotationMetadata.parameters ?? parsedParameters,
-        returnType: annotationMetadata.returnType
+        ...docMetadata,
+        parameters:
+          docMetadata.parameters.length > 0
+            ? docMetadata.parameters
+            : parsedParameters.map((name) => ({ name }))
       }
       addCompletion(fullName, pattern.kind, metadata)
       const tailName = fullName.split(/[.:]/).at(-1)
@@ -203,7 +328,8 @@ function getRequiredModuleNames(source: string): string[] {
 async function getRequiredModuleCompletions(
   source: string,
   depth = 0,
-  visited = new Set<string>()
+  visited = new Set<string>(),
+  mode: SymbolCompletionMode = 'normal'
 ): Promise<CompletionItem[]> {
   if (depth > 2) return []
   const moduleNames = getRequiredModuleNames(source)
@@ -219,11 +345,17 @@ async function getRequiredModuleCompletions(
       const moduleItems = getSymbolCompletionsFromSource(
         moduleSource,
         `Definition in required module: ${moduleName}`,
-        true
+        true,
+        mode
       )
       mergeWithDocumentSymbols(merged, moduleItems)
 
-      const nestedModuleItems = await getRequiredModuleCompletions(moduleSource, depth + 1, visited)
+      const nestedModuleItems = await getRequiredModuleCompletions(
+        moduleSource,
+        depth + 1,
+        visited,
+        mode
+      )
       mergeWithDocumentSymbols(merged, nestedModuleItems)
     } catch (error) {
       logger.debug(`Failed to collect required module definitions for "${moduleName}"`, error)
@@ -242,6 +374,42 @@ function mergeWithDocumentSymbols(
     if (!existingLabels.has(label)) baseItems.push(symbolItem)
   }
   return baseItems
+}
+
+function isObjectCallStringContext(line: string): boolean {
+  return /\b[A-Za-z_][A-Za-z0-9_]*\.call\(\s*["'][^"']*$/u.test(line)
+}
+
+function getDocTemplateSnippet(document: TextDocument, position: Position): CompletionItem[] {
+  const linePrefix = document.lineAt(position.line).text.substring(0, position.character).trim()
+  if (linePrefix !== '---') return []
+  const functionTemplateRegex = new RegExp(
+    [
+      '^(?:local\\s+function|function|(?:local\\s+)?',
+      '[A-Za-z_][A-Za-z0-9_.:]*\\s*=\\s*function)',
+      '\\s+?([A-Za-z_][A-Za-z0-9_.:]*)?\\s*\\(([^)]*)\\)'
+    ].join(''),
+    'u'
+  )
+
+  for (let lineIndex = position.line + 1; lineIndex < document.lineCount; lineIndex++) {
+    const nextLine = document.lineAt(lineIndex).text.trim()
+    if (nextLine === '') continue
+    const functionMatch = nextLine.match(functionTemplateRegex)
+    if (functionMatch === null) break
+    const params = parseFunctionParameters(functionMatch[2] ?? '')
+    const snippetBody = [
+      ' Description',
+      ...params.map((param) => `\n--- @param {any} ${param} - `),
+      '\n--- @returns {any} - '
+    ].join('')
+    const item = new CompletionItem('Generate docs comment', CompletionItemKind.Snippet)
+    item.insertText = new SnippetString(snippetBody)
+    item.sortText = '0_docs'
+    item.detail = 'Lua docs template'
+    return [item]
+  }
+  return []
 }
 
 enum LuaTokenType {
@@ -321,6 +489,8 @@ export default class luaCompletionProvider implements CompletionItemProvider {
   ): Promise<CompletionItem[] | CompletionList> {
     if (!getConfig<boolean>('autocompletion.luaEnabled')) return []
     if (this.luaCompletion === undefined) return []
+    const docTemplateCompletions = getDocTemplateSnippet(document, position)
+    if (docTemplateCompletions.length > 0) return docTemplateCompletions
     const documentSymbolCompletions = getDocumentSymbolCompletions(document)
     const requiredSymbolCompletions = await getRequiredModuleCompletions(document.getText())
     const trackedSymbolCompletions = mergeWithDocumentSymbols(
@@ -328,6 +498,21 @@ export default class luaCompletionProvider implements CompletionItemProvider {
       requiredSymbolCompletions
     )
     const line = document.lineAt(position).text.substring(0, position.character)
+    if (isObjectCallStringContext(line)) {
+      const exportedDocumentSymbols = getSymbolCompletionsFromSource(
+        document.getText(),
+        'Exported definition in current file',
+        true,
+        'export-string'
+      )
+      const exportedRequiredSymbols = await getRequiredModuleCompletions(
+        document.getText(),
+        0,
+        new Set<string>(),
+        'export-string'
+      )
+      return mergeWithDocumentSymbols(exportedDocumentSymbols, exportedRequiredSymbols)
+    }
     const token = hs.getScopeAt(document, position)
     if (token === null) {
       logger.error('HyperScope returned undefined token')
