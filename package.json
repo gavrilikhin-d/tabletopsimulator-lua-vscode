@@ -82,12 +82,6 @@
     },
     "commands": [
       {
-        "command": "ttslua.updateCompletionItems",
-        "title": "Update IntelliSense with latest TTS API",
-        "category": "TTS Lua",
-        "icon": "$(book)"
-      },
-      {
         "command": "ttslua.openConsole",
         "title": "Open TTS Console++",
         "category": "TTS Lua",
@@ -109,16 +103,6 @@
         "category": "TTS Lua"
       },
       {
-        "command": "ttslua.addGlobalInclude",
-        "title": "Add Global include folder to workspace",
-        "category": "TTS Lua"
-      },
-      {
-        "command": "ttslua.forceAutocompleteUpdate",
-        "title": "[Debug] Force autocomplete update",
-        "category": "TTS Lua"
-      },
-      {
         "command": "ttslua.executeLua",
         "title": "Execute selected Lua",
         "category": "TTS Lua",
@@ -127,11 +111,6 @@
       {
         "command": "ttslua.changeWorkDir",
         "title": "Change working directory where scripts will be saved to and loaded from.",
-        "category": "TTS Lua"
-      },
-      {
-        "command": "ttslua.downloadAssets",
-        "title": "Download assets",
         "category": "TTS Lua"
       },
       {

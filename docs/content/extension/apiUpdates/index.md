@@ -16,7 +16,7 @@ Bring up the command palette <kbd class="kbc-button-sm">Ctrl</kbd>+<kbd class="k
 
 Atom's autocompletion is stored here: https://github.com/Berserk-Games/atom-tabletopsimulator-lua/blob/master/lib/provider.coffee
 
-Whenever Berserk updates Atom's autocompletion, executing the command `ttslua.updateCompletionItems` will download this file, and process it to be integrated into VSCode. This process however does depend on Atom's autocomplete being updated soon-ish after any game update.
+Whenever Berserk updates Atom's autocompletion, extension will download this file, and process it to be integrated into VSCode. This process however does depend on Atom's autocomplete being updated soon-ish after any game update.
 
 When updating the completion items the extension will check if the `provider.coffee` file has changed and only if so, it will download it and process it to be integrated into VSCode. If there are new "sections" a message will be shown like so:
 
