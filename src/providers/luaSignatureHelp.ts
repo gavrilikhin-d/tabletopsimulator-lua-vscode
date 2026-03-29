@@ -29,6 +29,21 @@ export interface TrackedSignature {
   isDeprecated?: boolean
 }
 
+function isLikelyTtsEventName(name: string): boolean {
+  const shortName = name.split(/[.:]/).at(-1) ?? name
+  return /^on[A-Z_]/u.test(shortName)
+}
+
+function getOfficialApiMember(api: LuaAPI | undefined, name: string): Member | undefined {
+  for (const members of Object.values(api?.sections ?? {})) {
+    for (const member of members as Member[]) {
+      const shortName = member.name.split(/[.:]/).at(-1) ?? member.name
+      if (member.name === name || shortName === name) return member
+    }
+  }
+  return undefined
+}
+
 function buildLuaSignatureCodeBlock(
   name: string,
   parameters: TrackedParameter[],
@@ -256,7 +271,10 @@ function findCallContext(
   return null
 }
 
-function buildTrackedSignatureInformation(signature: TrackedSignature): SignatureInformation {
+function buildTrackedSignatureInformation(
+  signature: TrackedSignature,
+  officialMember?: Member
+): SignatureInformation {
   const shortName = signature.name.split(/[.:]/).at(-1) ?? signature.name
   const paramsLabel = signature.parameters
     .map((parameter) =>
@@ -271,6 +289,16 @@ function buildTrackedSignatureInformation(signature: TrackedSignature): Signatur
       ? `${labelCore} -> ${normalizeDocType(signature.returnType)}`
       : labelCore
   const doc = new MarkdownString()
+  const hasLocalDescription = signature.description !== undefined
+  const hasLocalParameters = signature.parameters.some(
+    (parameter) => parameter.type !== undefined || parameter.description !== undefined
+  )
+  const hasLocalReturns =
+    signature.returnType !== undefined || signature.returnDescription !== undefined
+  const hasAnyLocalDocumentation = hasLocalDescription || hasLocalParameters || hasLocalReturns
+  if (officialMember?.kind === 'event' || isLikelyTtsEventName(signature.name)) {
+    doc.appendMarkdown('**TTS Event**\n\n')
+  }
   doc.appendMarkdown(
     buildLuaSignatureCodeBlock(
       shortName,
@@ -279,10 +307,10 @@ function buildTrackedSignatureInformation(signature: TrackedSignature): Signatur
     )
   )
   if (signature.isDeprecated === true) doc.appendMarkdown('**Deprecated**\n\n')
-  if (signature.description !== undefined) {
+  if (hasLocalDescription) {
     doc.appendMarkdown(`**Description**\n${signature.description}\n\n`)
   }
-  if (signature.parameters.length > 0) {
+  if (hasLocalParameters) {
     doc.appendMarkdown('**Parameters**\n')
     for (const parameter of signature.parameters) {
       const normalizedType = normalizeDocType(parameter.type)
@@ -301,6 +329,30 @@ function buildTrackedSignatureInformation(signature: TrackedSignature): Signatur
     )
   } else if (signature.returnType !== undefined) {
     doc.appendMarkdown(`**Returns** \`${normalizeDocType(signature.returnType)}\`\n\n`)
+  }
+  if (officialMember !== undefined) {
+    if (hasAnyLocalDocumentation) doc.appendMarkdown('\n')
+    doc.appendMarkdown(`${officialMember.description}\n\n`)
+    if ((officialMember.parameters?.length ?? 0) > 0) {
+      doc.appendMarkdown('**Parameters**\n')
+      for (const parameter of officialMember.parameters ?? []) {
+        const description = parameter.description !== undefined ? ` - ${parameter.description}` : ''
+        doc.appendMarkdown(`- **${parameter.name}** \`${parameter.type}\`${description}\n`)
+      }
+      doc.appendMarkdown('\n')
+    }
+    if ((officialMember.return_table?.length ?? 0) > 0) {
+      doc.appendMarkdown('**Returns**\n')
+      for (const returnField of officialMember.return_table ?? []) {
+        const description =
+          returnField.description !== undefined ? ` - ${returnField.description}` : ''
+        doc.appendMarkdown(`- \`${returnField.type}\`${description}\n`)
+      }
+      doc.appendMarkdown('\n')
+    } else if (officialMember.type !== '') {
+      doc.appendMarkdown(`**Returns** \`${officialMember.type}\`\n\n`)
+    }
+    doc.appendMarkdown(`[Official Documentation](${officialMember.url})\n\n`)
   }
 
   const info = new SignatureInformation(label, doc)
@@ -328,6 +380,7 @@ function buildApiSignatureInformation(member: Member): SignatureInformation {
   const returnType = member.return_table?.map((item) => item.type).join(', ') ?? member.type
   const label = `${member.name}(${paramsLabel})${returnType !== '' ? ` -> ${returnType}` : ''}`
   const doc = new MarkdownString()
+  if (member.kind === 'event') doc.appendMarkdown('**TTS Event**\n\n')
   doc.appendMarkdown(
     buildLuaSignatureCodeBlock(
       member.name,
@@ -382,7 +435,9 @@ export default class LuaSignatureHelpProvider implements SignatureHelpProvider {
       tracked.set(name, (tracked.get(name) ?? []).concat(signatures))
     }
 
-    const trackedInfos = (tracked.get(context.name) ?? []).map(buildTrackedSignatureInformation)
+    const trackedInfos = (tracked.get(context.name) ?? []).map((signature) =>
+      buildTrackedSignatureInformation(signature, getOfficialApiMember(this.api, context.name))
+    )
     const apiInfos = this.apiSignatures.get(context.name) ?? []
     const signatures = [...trackedInfos, ...apiInfos]
     if (signatures.length === 0) return null

@@ -53,6 +53,30 @@ interface SymbolMetadata {
 
 type SymbolCompletionMode = 'normal' | 'export-string'
 
+function isLikelyTtsEventName(name: string): boolean {
+  const shortName = name.split(/[.:]/).at(-1) ?? name
+  return /^on[A-Z_]/u.test(shortName)
+}
+
+function getOfficialApiMember(
+  apiMembers: Map<string, apiManager.Member> | undefined,
+  name: string
+): apiManager.Member | undefined {
+  const shortName = name.split(/[.:]/).at(-1) ?? name
+  return apiMembers?.get(name) ?? apiMembers?.get(shortName)
+}
+
+function buildApiMembersLookup(api: apiManager.LuaAPI | undefined): Map<string, apiManager.Member> {
+  const lookup = new Map<string, apiManager.Member>()
+  for (const members of Object.values(api?.sections ?? {})) {
+    for (const member of members as apiManager.Member[]) {
+      lookup.set(member.name, member)
+      lookup.set(member.name.split(/[.:]/).at(-1) ?? member.name, member)
+    }
+  }
+  return lookup
+}
+
 function getDefinitionPatterns(): DefinitionPattern[] {
   return [
     {
@@ -188,9 +212,20 @@ function getDocCommentMetadata(
 function buildTrackedFunctionDocumentation(
   detail: string,
   name: string,
-  metadata: SymbolMetadata
+  metadata: SymbolMetadata,
+  officialMember?: apiManager.Member
 ): MarkdownString {
   const markdown = new MarkdownString()
+  const hasLocalDescription = metadata.description !== undefined
+  const hasLocalParameters = metadata.parameters.some(
+    (parameter) => parameter.type !== undefined || parameter.description !== undefined
+  )
+  const hasLocalReturns =
+    metadata.returnType !== undefined || metadata.returnDescription !== undefined
+  const hasAnyLocalDocumentation = hasLocalDescription || hasLocalParameters || hasLocalReturns
+  if (officialMember?.kind === 'event' || isLikelyTtsEventName(name)) {
+    markdown.appendMarkdown('**TTS Event**\n\n')
+  }
   const signatureParams = metadata.parameters.map((parameter) => parameter.name).join(', ')
   const returnSuffix =
     metadata.returnType !== undefined ? ` -> ${normalizeDocType(metadata.returnType)}` : ''
@@ -198,11 +233,11 @@ function buildTrackedFunctionDocumentation(
     ['```lua', `function ${name}(${signatureParams})${returnSuffix}`, '```', ''].join('\n')
   )
 
-  if (metadata.description !== undefined) {
+  if (hasLocalDescription) {
     markdown.appendMarkdown(`${metadata.description}\n\n`)
   }
 
-  if (metadata.parameters.length > 0) {
+  if (hasLocalParameters) {
     markdown.appendMarkdown('**Parameters**\n')
     for (const parameter of metadata.parameters) {
       const parameterType =
@@ -220,7 +255,7 @@ function buildTrackedFunctionDocumentation(
     markdown.appendMarkdown('\n')
   }
 
-  if (metadata.returnType !== undefined || metadata.returnDescription !== undefined) {
+  if (hasLocalReturns) {
     markdown.appendMarkdown('**Returns**\n')
     const returnType =
       metadata.returnType !== undefined
@@ -233,6 +268,31 @@ function buildTrackedFunctionDocumentation(
     markdown.appendMarkdown(`- ${returnType}${returnDescription}\n\n`)
   }
 
+  if (officialMember !== undefined) {
+    if (hasAnyLocalDocumentation) markdown.appendMarkdown('\n')
+    markdown.appendMarkdown(`${officialMember.description}\n\n`)
+    if ((officialMember.parameters?.length ?? 0) > 0) {
+      markdown.appendMarkdown('**Parameters**\n')
+      for (const parameter of officialMember.parameters ?? []) {
+        const description = parameter.description !== undefined ? ` - ${parameter.description}` : ''
+        markdown.appendMarkdown(`- **${parameter.name}** \`${parameter.type}\`${description}\n`)
+      }
+      markdown.appendMarkdown('\n')
+    }
+    if ((officialMember.return_table?.length ?? 0) > 0) {
+      markdown.appendMarkdown('**Returns**\n')
+      for (const returnField of officialMember.return_table ?? []) {
+        const description =
+          returnField.description !== undefined ? ` - ${returnField.description}` : ''
+        markdown.appendMarkdown(`- \`${returnField.type}\`${description}\n`)
+      }
+      markdown.appendMarkdown('\n')
+    } else if (officialMember.type !== '') {
+      markdown.appendMarkdown(`**Returns** \`${officialMember.type}\`\n\n`)
+    }
+    markdown.appendMarkdown(`[Official Documentation](${officialMember.url})\n\n`)
+  }
+
   markdown.appendMarkdown(`_${detail}_`)
   return markdown
 }
@@ -241,7 +301,8 @@ function getSymbolCompletionsFromSource(
   source: string,
   detail: string,
   includeLocalDefinitions: boolean,
-  mode: SymbolCompletionMode = 'normal'
+  mode: SymbolCompletionMode = 'normal',
+  officialApiMembers?: Map<string, apiManager.Member>
 ): CompletionItem[] {
   const completions = new Map<string, CompletionItem>()
   const lines = source.split(/\r?\n/)
@@ -254,25 +315,49 @@ function getSymbolCompletionsFromSource(
   ): void => {
     if (mode === 'export-string' && metadata.isExported !== true) return
     if (completions.has(name)) return
+    const officialMember = getOfficialApiMember(officialApiMembers, name)
+    const effectiveKind =
+      kind === CompletionItemKind.Function &&
+      (officialMember?.kind === 'event' || isLikelyTtsEventName(name))
+        ? CompletionItemKind.Event
+        : kind
     const functionParameterNames = metadata.parameters.map((parameter) => parameter.name)
     const completion = new CompletionItem(
-      mode === 'normal' && kind === CompletionItemKind.Function
+      mode === 'normal' &&
+        (effectiveKind === CompletionItemKind.Function ||
+          effectiveKind === CompletionItemKind.Event)
         ? {
             label: name,
-            description: metadata.returnType ?? 'function',
+            description:
+              metadata.returnType ??
+              (effectiveKind === CompletionItemKind.Event ? 'event' : 'function'),
             detail: `(${functionParameterNames.join(', ')})`
           }
         : name,
-      kind
+      effectiveKind
     )
-    completion.detail = detail
+    completion.detail =
+      effectiveKind === CompletionItemKind.Event ? `${detail} · TTS event` : detail
     completion.sortText = `0_local_${name}`
-    if (mode === 'normal' && kind === CompletionItemKind.Function) {
+    if (
+      mode === 'normal' &&
+      (effectiveKind === CompletionItemKind.Function || effectiveKind === CompletionItemKind.Event)
+    ) {
       completion.insertText = buildFunctionSnippet(name, functionParameterNames)
-      completion.documentation = buildTrackedFunctionDocumentation(detail, name, metadata)
+      completion.documentation = buildTrackedFunctionDocumentation(
+        detail,
+        name,
+        metadata,
+        officialMember
+      )
     } else if (mode === 'export-string') {
       completion.insertText = name
-      completion.documentation = buildTrackedFunctionDocumentation(detail, name, metadata)
+      completion.documentation = buildTrackedFunctionDocumentation(
+        detail,
+        name,
+        metadata,
+        officialMember
+      )
     }
     if (metadata.isDeprecated === true) {
       completion.tags = [CompletionItemTag.Deprecated]
@@ -306,10 +391,6 @@ function getSymbolCompletionsFromSource(
   return [...completions.values()]
 }
 
-function getDocumentSymbolCompletions(document: TextDocument): CompletionItem[] {
-  return getSymbolCompletionsFromSource(document.getText(), 'Definition in current file', true)
-}
-
 function getRequiredModuleNames(source: string): string[] {
   const modules = new Set<string>()
   const requireRegex = /require\s*\(\s*["']([^"']+)["']\s*\)/g
@@ -324,7 +405,8 @@ async function getRequiredModuleCompletions(
   source: string,
   depth = 0,
   visited = new Set<string>(),
-  mode: SymbolCompletionMode = 'normal'
+  mode: SymbolCompletionMode = 'normal',
+  officialApiMembers?: Map<string, apiManager.Member>
 ): Promise<CompletionItem[]> {
   if (depth > 2) return []
   const moduleNames = getRequiredModuleNames(source)
@@ -341,7 +423,8 @@ async function getRequiredModuleCompletions(
         moduleSource,
         `Definition in required module: ${moduleName}`,
         true,
-        mode
+        mode,
+        officialApiMembers
       )
       mergeWithDocumentSymbols(merged, moduleItems)
 
@@ -349,7 +432,8 @@ async function getRequiredModuleCompletions(
         moduleSource,
         depth + 1,
         visited,
-        mode
+        mode,
+        officialApiMembers
       )
       mergeWithDocumentSymbols(merged, nestedModuleItems)
     } catch (error) {
@@ -484,10 +568,23 @@ export default class luaCompletionProvider implements CompletionItemProvider {
   ): Promise<CompletionItem[] | CompletionList> {
     if (!getConfig<boolean>('autocompletion.luaEnabled')) return []
     if (this.luaCompletion === undefined) return []
+    const officialApiMembers = buildApiMembersLookup(this.luaCompletion.api)
     const docTemplateCompletions = getDocTemplateSnippet(document, position)
     if (docTemplateCompletions.length > 0) return docTemplateCompletions
-    const documentSymbolCompletions = getDocumentSymbolCompletions(document)
-    const requiredSymbolCompletions = await getRequiredModuleCompletions(document.getText())
+    const documentSymbolCompletions = getSymbolCompletionsFromSource(
+      document.getText(),
+      'Definition in current file',
+      true,
+      'normal',
+      officialApiMembers
+    )
+    const requiredSymbolCompletions = await getRequiredModuleCompletions(
+      document.getText(),
+      0,
+      new Set<string>(),
+      'normal',
+      officialApiMembers
+    )
     const trackedSymbolCompletions = mergeWithDocumentSymbols(
       documentSymbolCompletions,
       requiredSymbolCompletions
@@ -498,13 +595,15 @@ export default class luaCompletionProvider implements CompletionItemProvider {
         document.getText(),
         'Exported definition in current file',
         true,
-        'export-string'
+        'export-string',
+        officialApiMembers
       )
       const exportedRequiredSymbols = await getRequiredModuleCompletions(
         document.getText(),
         0,
         new Set<string>(),
-        'export-string'
+        'export-string',
+        officialApiMembers
       )
       return mergeWithDocumentSymbols(exportedDocumentSymbols, exportedRequiredSymbols)
     }
