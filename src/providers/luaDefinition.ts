@@ -11,11 +11,46 @@ import {
   type Position,
   type CancellationToken,
   Location,
+  workspace,
   type Definition,
   Range
 } from 'vscode'
 import { locateModule } from '@/utils/moduleResolution'
 import { logger } from '@/vscode/logger'
+
+interface DefinitionPattern {
+  regex: RegExp
+  isLocalDefinition: boolean
+}
+
+function getDefinitionPatterns(): DefinitionPattern[] {
+  return [
+    { regex: /^\s*local\s+function\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(/, isLocalDefinition: true },
+    {
+      regex: /^\s*function\s+([A-Za-z_][A-Za-z0-9_]*(?:[.:][A-Za-z_][A-Za-z0-9_]*)*)\s*\(/,
+      isLocalDefinition: false
+    },
+    { regex: /^\s*local\s+([A-Za-z_][A-Za-z0-9_]*)\s*=/, isLocalDefinition: true },
+    {
+      regex: /^\s*([A-Za-z_][A-Za-z0-9_]*(?:[.:][A-Za-z_][A-Za-z0-9_]*)*)\s*=\s*function\s*\(/,
+      isLocalDefinition: false
+    },
+    {
+      regex: /^\s*([A-Za-z_][A-Za-z0-9_]*(?:[.:][A-Za-z_][A-Za-z0-9_]*)*)\s*=/,
+      isLocalDefinition: false
+    }
+  ]
+}
+
+function getRequiredModuleNames(source: string): string[] {
+  const modules = new Set<string>()
+  const requireRegex = /require\s*\(\s*["']([^"']+)["']\s*\)/g
+  for (const match of source.matchAll(requireRegex)) {
+    const moduleName = match[1]?.trim()
+    if (moduleName !== undefined && moduleName !== '') modules.add(moduleName)
+  }
+  return [...modules]
+}
 
 export class LuaDefinitionProvider implements DefinitionProvider {
   public async provideDefinition(
@@ -39,14 +74,20 @@ export class LuaDefinitionProvider implements DefinitionProvider {
     const wordRange = document.getWordRangeAtPosition(position, /\b[A-Za-z_][A-Za-z0-9_]*\b/)
     if (wordRange === undefined) return null
     const symbolName = document.getText(wordRange)
-    const trackedDefinitions = this.trackDefinitions(document)
+    const source = document.getText()
+    const trackedDefinitions = this.trackDefinitionsInSource(source, document.uri, true)
+    const requiredDefinitions = await this.trackRequiredModuleDefinitions(source)
+    this.mergeDefinitions(trackedDefinitions, requiredDefinitions)
     const candidates = trackedDefinitions.get(symbolName) ?? []
     if (candidates.length === 0) return null
 
-    const closestPrevious = [...candidates]
-      .filter((location) => location.range.start.line <= position.line)
+    const inCurrentFile = candidates.filter(
+      (location) => location.uri.fsPath === document.uri.fsPath
+    )
+    const closestPrevious = [...inCurrentFile]
+      .filter((location) => location.range.start.line < position.line)
       .sort((a, b) => b.range.start.line - a.range.start.line)[0]
-    return closestPrevious ?? candidates[0]
+    return closestPrevious ?? inCurrentFile[0] ?? candidates[0]
   }
 
   private getRequireModuleAtPosition(line: string, character: number): string | undefined {
@@ -63,19 +104,18 @@ export class LuaDefinitionProvider implements DefinitionProvider {
     return undefined
   }
 
-  private trackDefinitions(document: TextDocument): Map<string, Location[]> {
+  private trackDefinitionsInSource(
+    source: string,
+    uri: TextDocument['uri'],
+    includeLocalDefinitions: boolean
+  ): Map<string, Location[]> {
     const definitions = new Map<string, Location[]>()
-    const lines = document.getText().split(/\r?\n/)
-    const patterns = [
-      /^\s*local\s+function\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(/,
-      /^\s*function\s+([A-Za-z_][A-Za-z0-9_]*(?:[.:][A-Za-z_][A-Za-z0-9_]*)*)\s*\(/,
-      /^\s*local\s+([A-Za-z_][A-Za-z0-9_]*)\s*=/,
-      /^\s*([A-Za-z_][A-Za-z0-9_]*(?:[.:][A-Za-z_][A-Za-z0-9_]*)*)\s*=\s*function\s*\(/
-    ]
+    const lines = source.split(/\r?\n/)
+    const patterns = getDefinitionPatterns()
 
     const addDefinition = (name: string, lineIndex: number, charIndex: number): void => {
       const location = new Location(
-        document.uri,
+        uri,
         new Range(lineIndex, charIndex, lineIndex, charIndex + name.length)
       )
       const existing = definitions.get(name) ?? []
@@ -84,8 +124,9 @@ export class LuaDefinitionProvider implements DefinitionProvider {
     }
 
     lines.forEach((line, lineIndex) => {
-      for (const regex of patterns) {
-        const match = line.match(regex)
+      for (const pattern of patterns) {
+        if (!includeLocalDefinitions && pattern.isLocalDefinition) continue
+        const match = line.match(pattern.regex)
         const fullName = match?.[1]
         if (fullName === undefined) continue
         const fullNameIndex = line.indexOf(fullName)
@@ -100,5 +141,47 @@ export class LuaDefinitionProvider implements DefinitionProvider {
     })
 
     return definitions
+  }
+
+  private mergeDefinitions(
+    target: Map<string, Location[]>,
+    source: Map<string, Location[]>
+  ): Map<string, Location[]> {
+    for (const [symbol, locations] of source.entries()) {
+      const existing = target.get(symbol) ?? []
+      target.set(symbol, existing.concat(locations))
+    }
+    return target
+  }
+
+  private async trackRequiredModuleDefinitions(
+    source: string,
+    depth = 0,
+    visited = new Set<string>()
+  ): Promise<Map<string, Location[]>> {
+    const result = new Map<string, Location[]>()
+    if (depth > 2) return result
+
+    for (const moduleName of getRequiredModuleNames(source)) {
+      try {
+        const moduleUri = await locateModule(moduleName)
+        if (visited.has(moduleUri.fsPath)) continue
+        visited.add(moduleUri.fsPath)
+
+        const moduleSource = new TextDecoder().decode(await workspace.fs.readFile(moduleUri))
+        const moduleDefinitions = this.trackDefinitionsInSource(moduleSource, moduleUri, false)
+        this.mergeDefinitions(result, moduleDefinitions)
+
+        const nestedDefinitions = await this.trackRequiredModuleDefinitions(
+          moduleSource,
+          depth + 1,
+          visited
+        )
+        this.mergeDefinitions(result, nestedDefinitions)
+      } catch (error) {
+        logger.debug(`Module not found while tracking definitions: ${moduleName}`, error)
+      }
+    }
+    return result
   }
 }
