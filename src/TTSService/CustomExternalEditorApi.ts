@@ -10,6 +10,7 @@ import { informMultipleInstances, informGameNotRunning } from '@/vscode/errorHan
 import ExternalEditorApi, { type JsonMessage, type Options } from '@matanlurey/tts-editor'
 import { Socket } from 'net'
 import L from '@/i18n'
+import { logger } from '@/vscode/logger'
 
 export default class CustomExternalEditorApi extends ExternalEditorApi {
   constructor(options: Options = {}) {
@@ -44,7 +45,7 @@ export default class CustomExternalEditorApi extends ExternalEditorApi {
       client.once('error', (err: NodeJS.ErrnoException) => {
         if (err.code === 'EADDRINUSE') informMultipleInstances()
         if (err.code === 'ECONNREFUSED') informGameNotRunning()
-        console.error(L.errors.serverError, err)
+        logger.error(L.errors.serverError, err)
         reject(err)
       })
       client.connect(this.clientPort, getConfig('misc.host'), () => {

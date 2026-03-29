@@ -1,5 +1,6 @@
 import { type CustomMessage } from '@matanlurey/tts-editor'
+import { logger } from '@/vscode/logger'
 
 export default (e: CustomMessage): void => {
-  console.log(e)
+  logger.info(e)
 }

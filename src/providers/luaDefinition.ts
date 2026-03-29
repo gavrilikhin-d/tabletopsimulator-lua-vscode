@@ -14,6 +14,7 @@ import {
   type DefinitionLink,
   Range
 } from 'vscode'
+import { logger } from '@/vscode/logger'
 
 export class LuaDefinitionProvider implements DefinitionProvider {
   public async provideDefinition(
@@ -27,7 +28,7 @@ export class LuaDefinitionProvider implements DefinitionProvider {
     const hoverText = document.getText(document.getWordRangeAtPosition(position, /["'][^"]+["']/))
     // if line contains require($hovertext)
     if (line.includes(`require(${hoverText})`)) {
-      console.log(line)
+      logger.debug(line)
       const u = Uri.file(
         'C:\\Users\\Rolando\\Seafile\\Rolando Profesional\\Proyectos\\@Independiente\\tabletopsimulator-lua-2\\src\\lib\\tests\\fixture2\\objects\\Bag.7091eb.tso'
       )

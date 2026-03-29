@@ -1,5 +1,6 @@
 import { type ObjectCreated } from '@matanlurey/tts-editor'
+import { logger } from '@/vscode/logger'
 
 export default (e: ObjectCreated): void => {
-  console.log('Object created:', e)
+  logger.info('Object created:', e)
 }

@@ -14,6 +14,7 @@ import {
 import { LuaCompletion } from '.'
 import * as apiManager from './apiManager'
 import { type LineToken, hs } from '..'
+import { logger } from '@/vscode/logger'
 
 function snippet(label: string, insert: string, sortText = ''): CompletionItem {
   const result = new CompletionItem(label, CompletionItemKind.Snippet)
@@ -102,7 +103,7 @@ export default class luaCompletionProvider implements CompletionItemProvider {
     const line = document.lineAt(position).text.substring(0, position.character)
     const token = hs.getScopeAt(document, position)
     if (token === null) {
-      console.error('HyperScope returned undefined token')
+      logger.error('HyperScope returned undefined token')
       return []
     }
 
@@ -160,7 +161,7 @@ export default class luaCompletionProvider implements CompletionItemProvider {
     // -------------------------------------- Tokenization --------------------------------------
     const grammar = await hs.getGrammar(token.scopes[0])
     if (grammar === null) {
-      console.error('HyperScope returned undefined grammar')
+      logger.error('HyperScope returned undefined grammar')
       return []
     }
     // Clever! We add an underscore to the end of the line to "peek" at the scope of what comes next
@@ -239,7 +240,7 @@ export default class luaCompletionProvider implements CompletionItemProvider {
 
     // 2. Writing something after a dot
     if (currentToken.scopes[1] === 'entity.other.attribute.lua') {
-      console.log('Returning object completion')
+      logger.debug('Returning object completion')
       switch (previousToken?.type) {
         case LuaTokenType.SCALAR:
           if (previousToken.value === 'Player') {
