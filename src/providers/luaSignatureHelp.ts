@@ -29,6 +29,16 @@ export interface TrackedSignature {
   isDeprecated?: boolean
 }
 
+function buildLuaSignatureCodeBlock(
+  name: string,
+  parameters: TrackedParameter[],
+  returnType?: string
+): string {
+  const paramsLabel = parameters.map((parameter) => parameter.name).join(', ')
+  const returnSuffix = returnType !== undefined ? ` -> ${normalizeDocType(returnType)}` : ''
+  return ['```lua', `function ${name}(${paramsLabel})${returnSuffix}`, '```', ''].join('\n')
+}
+
 interface DefinitionPattern {
   regex: RegExp
   isLocalDefinition: boolean
@@ -261,6 +271,13 @@ function buildTrackedSignatureInformation(signature: TrackedSignature): Signatur
       ? `${labelCore} -> ${normalizeDocType(signature.returnType)}`
       : labelCore
   const doc = new MarkdownString()
+  doc.appendMarkdown(
+    buildLuaSignatureCodeBlock(
+      shortName,
+      signature.parameters,
+      normalizeDocType(signature.returnType)
+    )
+  )
   if (signature.isDeprecated === true) doc.appendMarkdown('**Deprecated**\n\n')
   if (signature.description !== undefined) {
     doc.appendMarkdown(`**Description**\n${signature.description}\n\n`)
@@ -310,7 +327,15 @@ function buildApiSignatureInformation(member: Member): SignatureInformation {
     .join(', ')
   const returnType = member.return_table?.map((item) => item.type).join(', ') ?? member.type
   const label = `${member.name}(${paramsLabel})${returnType !== '' ? ` -> ${returnType}` : ''}`
-  const doc = new MarkdownString(member.description)
+  const doc = new MarkdownString()
+  doc.appendMarkdown(
+    buildLuaSignatureCodeBlock(
+      member.name,
+      parameters.map((parameter) => ({ name: parameter.name })),
+      returnType !== '' ? returnType : undefined
+    )
+  )
+  doc.appendMarkdown(member.description)
 
   const info = new SignatureInformation(label, doc)
   info.parameters = parameters.map((parameter) => {

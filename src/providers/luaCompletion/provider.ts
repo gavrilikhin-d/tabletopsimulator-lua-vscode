@@ -191,17 +191,12 @@ function buildTrackedFunctionDocumentation(
   metadata: SymbolMetadata
 ): MarkdownString {
   const markdown = new MarkdownString()
-  const signature = `${name}(${metadata.parameters
-    .map((parameter) => {
-      const normalizedType = normalizeDocType(parameter.type)
-      return normalizedType !== undefined ? `${parameter.name}: ${normalizedType}` : parameter.name
-    })
-    .join(', ')})`
-  markdown.appendMarkdown(`### \`${signature}\``)
-  if (metadata.returnType !== undefined) {
-    markdown.appendMarkdown(` -> \`${normalizeDocType(metadata.returnType)}\``)
-  }
-  markdown.appendMarkdown('\n\n')
+  const signatureParams = metadata.parameters.map((parameter) => parameter.name).join(', ')
+  const returnSuffix =
+    metadata.returnType !== undefined ? ` -> ${normalizeDocType(metadata.returnType)}` : ''
+  markdown.appendMarkdown(
+    ['```lua', `function ${name}(${signatureParams})${returnSuffix}`, '```', ''].join('\n')
+  )
 
   if (metadata.description !== undefined) {
     markdown.appendMarkdown(`${metadata.description}\n\n`)
