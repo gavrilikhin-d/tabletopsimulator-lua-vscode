@@ -1,14 +1,21 @@
 import getConfig from '@/utils/getConfig'
 import {
-  type CompletionItemProvider, type TextDocument, type Position, type CancellationToken,
-  type CompletionContext, CompletionItem, type CompletionList, CompletionItemKind, SnippetString,
+  type CompletionItemProvider,
+  type TextDocument,
+  type Position,
+  type CancellationToken,
+  type CompletionContext,
+  CompletionItem,
+  type CompletionList,
+  CompletionItemKind,
+  SnippetString,
   type CompletionItemLabel
 } from 'vscode'
 import { LuaCompletion } from '.'
 import * as apiManager from './apiManager'
 import { type LineToken, hs } from '..'
 
-function snippet (label: string, insert: string, sortText = ''): CompletionItem {
+function snippet(label: string, insert: string, sortText = ''): CompletionItem {
   const result = new CompletionItem(label, CompletionItemKind.Snippet)
   result.insertText = new SnippetString(insert)
   result.sortText = sortText
@@ -28,7 +35,7 @@ enum LuaTokenType {
  * @param lineTokens - The tokens returned by the grammar
  * @returns An array of tokens with the type property
  */
-function processLineTokens (lineTokens: LineToken[]): Array<LineToken & { type: number }> {
+function processLineTokens(lineTokens: LineToken[]): Array<LineToken & { type: number }> {
   type validEnclosures = '[' | '(' | ']' | ')'
   interface enclosureInfo {
     match: validEnclosures
@@ -79,12 +86,12 @@ function processLineTokens (lineTokens: LineToken[]): Array<LineToken & { type: 
 export default class luaCompletionProvider implements CompletionItemProvider {
   private luaCompletion: LuaCompletion | undefined
 
-  public async preload (): Promise<void> {
+  public async preload(): Promise<void> {
     const latestApi = await apiManager.loadApi()
     this.luaCompletion = new LuaCompletion(latestApi)
   }
 
-  public async provideCompletionItems (
+  public async provideCompletionItems(
     document: TextDocument,
     position: Position,
     _token: CancellationToken,
@@ -106,28 +113,34 @@ export default class luaCompletionProvider implements CompletionItemProvider {
       'string.quoted.single.lua', // Skip strings
       'comment.line.double-dash.lua' // Skip comments
     ]
-    if (skippedScopes.some(v => token.scopes.includes(v))) return []
+    if (skippedScopes.some((v) => token.scopes.includes(v))) return []
 
     // Short circuit some common lua keywords
     if (
-      (line.match(/(^|\s)else$/) != null) ||
-      (line.match(/(^|\s)elseif$/) != null) ||
-      (line.match(/(^|\s)end$/) != null)
-    ) return []
+      line.match(/(^|\s)else$/) != null ||
+      line.match(/(^|\s)elseif$/) != null ||
+      line.match(/(^|\s)end$/) != null
+    ) {
+      return []
+    }
     // If we're in the middle of typing a number then suggest nothing on .
-    if (context.triggerCharacter === '.' && (token.text.match(/^[0-9]$/) != null)) return []
+    if (context.triggerCharacter === '.' && token.text.match(/^[0-9]$/) != null) return []
 
     // Syntactic Snippets -----------------------------------------------------------------------
 
     if (line.endsWith(' do')) return [snippet('do...end', 'do\n\t$0\nend')]
     if (line.endsWith(' repeat')) return [snippet('repeat...until', 'repeat\n\t$0\nuntil $1')]
-    if (line.endsWith(' then') && !line.includes('elseif')) { return [snippet('then...end', 'then\n\t$0\nend')] }
+    if (line.endsWith(' then') && !line.includes('elseif')) {
+      return [snippet('then...end', 'then\n\t$0\nend')]
+    }
 
     const functionIndex = line.indexOf('function ')
     const parenIndex = line.indexOf('(')
     if (functionIndex >= 0 && parenIndex > 0 && line.endsWith(')')) {
       let name = line.substring(functionIndex + 9, parenIndex).trimStart()
-      name = name.substring(name.lastIndexOf(' ') + 1) + getConfig<string>('autocompletion.coroutineSuffix')
+      name =
+        name.substring(name.lastIndexOf(' ') + 1) +
+        getConfig<string>('autocompletion.coroutineSuffix')
 
       const functionSnippets = [
         snippet('function...end', '\n\t$0\nend', '1st'),
@@ -153,7 +166,7 @@ export default class luaCompletionProvider implements CompletionItemProvider {
     // Clever! We add an underscore to the end of the line to "peek" at the scope of what comes next
     const lineTokens: LineToken[] = grammar
       .tokenizeLine(line + '_', null)
-      .tokens.map(v => {
+      .tokens.map((v) => {
         return {
           value: (line + '_').substring(v.startIndex, v.endIndex),
           start: v.startIndex,
@@ -162,16 +175,18 @@ export default class luaCompletionProvider implements CompletionItemProvider {
         }
       })
       .reverse()
-      .filter(v => v.value !== '.' && v.value.trim().length !== 0)
-    const [currentToken, previousToken] = processLineTokens(lineTokens).filter(v => !v.value.endsWith('.'))
+      .filter((v) => v.value !== '.' && v.value.trim().length !== 0)
+    const [currentToken, previousToken] = processLineTokens(lineTokens).filter(
+      (v) => !v.value.endsWith('.')
+    )
 
     // -------------------------------------- Completion ----------------------------------------
     /**
-       * Completion of a line falls under one of the 3 following patterns:
-       * 1. We are writing something with no other info, we suggest the root (/) completion
-       * 2. We are writing something after a dot, we suggest the completion of the previous token
-       * 3. We are writing a function, we suggest eventbased completions
-       */
+     * Completion of a line falls under one of the 3 following patterns:
+     * 1. We are writing something with no other info, we suggest the root (/) completion
+     * 2. We are writing something after a dot, we suggest the completion of the previous token
+     * 3. We are writing a function, we suggest eventbased completions
+     */
 
     // 1. We started writing at root scope (most code will autocomplete here)
     if (
@@ -179,10 +194,12 @@ export default class luaCompletionProvider implements CompletionItemProvider {
       currentToken.scopes[1] !== undefined &&
       currentToken.scopes[1] === 'variable.other.lua'
     ) {
-      const completionItems: CompletionItem[] = Array.from(this.luaCompletion.completionStore.get('/') ?? [])
+      const completionItems: CompletionItem[] = Array.from(
+        this.luaCompletion.completionStore.get('/') ?? []
+      )
       // If there's an assignment, offer getObjectFromGUID with suffix
       if (line.includes('=')) {
-        const itemIndex = completionItems.findIndex(v =>
+        const itemIndex = completionItems.findIndex((v) =>
           (v.label as CompletionItemLabel).label.startsWith('getObjectFromGUID')
         )
         const id = line.match(/([^\s]+)\s*=[^=]*$/)
@@ -191,9 +208,7 @@ export default class luaCompletionProvider implements CompletionItemProvider {
           const cleanId = id[1].replace(/[^a-zA-Z0-9]/g, '')
           const guidSuffix = getConfig<string>('autocompletion.guidSuffix')
           // Deep Copy the completion item
-          const smartGetObjectFromGUID: CompletionItem = Object.create(
-            completionItems[itemIndex]
-          )
+          const smartGetObjectFromGUID: CompletionItem = Object.create(completionItems[itemIndex])
           // Replace the snippet with the new one
           smartGetObjectFromGUID.label = `getObjectFromGUID(->${cleanId}${guidSuffix})`
           smartGetObjectFromGUID.insertText = new SnippetString(
@@ -227,15 +242,25 @@ export default class luaCompletionProvider implements CompletionItemProvider {
       console.log('Returning object completion')
       switch (previousToken?.type) {
         case LuaTokenType.SCALAR:
-          if (previousToken.value === 'Player') return this.luaCompletion.completionStore.get('PlayerManager') ?? []
-          if (previousToken.value.endsWith('game_object')) return this.luaCompletion.completionStore.get('GameObject') ?? []
-          if (previousToken.value.endsWith('material')) return this.luaCompletion.completionStore.get('Material') ?? []
+          if (previousToken.value === 'Player') {
+            return this.luaCompletion.completionStore.get('PlayerManager') ?? []
+          }
+          if (previousToken.value.endsWith('game_object')) {
+            return this.luaCompletion.completionStore.get('GameObject') ?? []
+          }
+          if (previousToken.value.endsWith('material')) {
+            return this.luaCompletion.completionStore.get('Material') ?? []
+          }
           break
         case LuaTokenType.TABLE:
-          if (previousToken.value === 'Player') return this.luaCompletion.completionStore.get('PlayerInstance') ?? []
+          if (previousToken.value === 'Player') {
+            return this.luaCompletion.completionStore.get('PlayerInstance') ?? []
+          }
           break
         case LuaTokenType.FUNCTION:
-          if (previousToken.value === 'getComponent') return this.luaCompletion.completionStore.get('Component') ?? []
+          if (previousToken.value === 'getComponent') {
+            return this.luaCompletion.completionStore.get('Component') ?? []
+          }
       }
 
       if (previousToken !== undefined) {
@@ -245,7 +270,9 @@ export default class luaCompletionProvider implements CompletionItemProvider {
       // It's not named in the API => treat it as an Object.
       // Before adding the Object completions we'll check if the variable is named something
       // indicating a behavior, and if it is add those completions first.
-      const completionItems: CompletionItem[] = Array.from(this.luaCompletion.completionStore.get('Object') ?? [])
+      const completionItems: CompletionItem[] = Array.from(
+        this.luaCompletion.completionStore.get('Object') ?? []
+      )
       for (const b of this.luaCompletion.behaviourStore) {
         if (previousToken?.value.toLowerCase().endsWith(b.toLowerCase())) {
           const bCompletions = this.luaCompletion.completionStore.get(b) ?? []
@@ -263,7 +290,10 @@ export default class luaCompletionProvider implements CompletionItemProvider {
     }
 
     // 3. Either writing their own function, or looking for an event, so add the events
-    if (currentToken.scopes[2] !== undefined && currentToken.scopes[2] === 'entity.name.function.lua') {
+    if (
+      currentToken.scopes[2] !== undefined &&
+      currentToken.scopes[2] === 'entity.name.function.lua'
+    ) {
       // GlobalEvents already include universal event handlers, so we'll just return them
       if (document.fileName.endsWith('-1.lua') || document.fileName.endsWith('-1.ttslua')) {
         return this.luaCompletion.completionStore.get('GlobalEvents') ?? []
@@ -272,13 +302,23 @@ export default class luaCompletionProvider implements CompletionItemProvider {
       // The API does not make a distinction between global and universal events,
       // so we'll define the global events, and calculate the universal events
       // https://api.tabletopsimulator.com/events/#universal-event-handlers-summary
-      const globalEventHandlerLabels = ['onZoneGroupSort', 'tryObjectEnterContainer', 'tryObjectRandomize', 'tryObjectRotate']
-      const universalEventHandlers = this.luaCompletion.completionStore.get('GlobalEvents')?.filter(v =>
-      // GlobalEvents Completion Store minus the global event handlers = universal event handlers
-        !globalEventHandlerLabels.includes((v.label as CompletionItemLabel).label)
+      const globalEventHandlerLabels = [
+        'onZoneGroupSort',
+        'tryObjectEnterContainer',
+        'tryObjectRandomize',
+        'tryObjectRotate'
+      ]
+      const universalEventHandlers = this.luaCompletion.completionStore.get('GlobalEvents')?.filter(
+        (v) =>
+          // GlobalEvents Completion Store minus the global event handlers = universal event handlers
+          !globalEventHandlerLabels.includes((v.label as CompletionItemLabel).label)
       )
-      if (universalEventHandlers === undefined) throw new Error('Universal Event Handlers are undefined')
-      return universalEventHandlers.concat(this.luaCompletion.completionStore.get('ObjectEvents') ?? [])
+      if (universalEventHandlers === undefined) {
+        throw new Error('Universal Event Handlers are undefined')
+      }
+      return universalEventHandlers.concat(
+        this.luaCompletion.completionStore.get('ObjectEvents') ?? []
+      )
     }
     return []
   }

@@ -12,19 +12,18 @@ export const getIncludePaths = (): string[] => [
   // TODO: Config Paths...,
   // Workspace Paths, starting by current workdir
   getWorkDir().fsPath,
-  ...(
-    (workspace.workspaceFolders?.map(f => f.uri.fsPath) ?? [])
-      .filter(p => p !== getWorkDir().fsPath)
+  ...(workspace.workspaceFolders?.map((f) => f.uri.fsPath) ?? []).filter(
+    (p) => p !== getWorkDir().fsPath
   )
 ]
 
-export function getSearchPaths (): string[] {
-  const paths = luaPatterns.flatMap(pt => getIncludePaths().map(p => join(p, pt)))
+export function getSearchPaths(): string[] {
+  const paths = luaPatterns.flatMap((pt) => getIncludePaths().map((p) => join(p, pt)))
   paths.push(...luaPatterns)
   return paths
 }
 
-export async function locateModule (moduleName: string): Promise<Uri> {
+export async function locateModule(moduleName: string): Promise<Uri> {
   for (const path of getSearchPaths()) {
     const uri = Uri.file(path.replace('?', moduleName))
     // Check if the file exists

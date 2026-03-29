@@ -7,8 +7,8 @@
  * @returns A nonce
  */
 export default (length = 32): string =>
-  Array.from(
-    { length },
-    () => 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
-      .charAt(Math.floor(Math.random() * 62))
+  Array.from({ length }, () =>
+    'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'.charAt(
+      Math.floor(Math.random() * 62)
+    )
   ).join('')

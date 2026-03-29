@@ -3,7 +3,7 @@ import { dirname } from 'path'
 import isGuidValid from '@/utils/isGuidValid'
 import TTSService from '..'
 
-export default async function executeSelectedLua (script?: string, guid?: string): Promise<void> {
+export default async function executeSelectedLua(script?: string, guid?: string): Promise<void> {
   // Get Current selection from vscode
   const editor = window.activeTextEditor
   // If no editor is open, fail silently

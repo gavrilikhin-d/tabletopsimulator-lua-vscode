@@ -3,7 +3,7 @@
  * Providers are used to provide features like completion, hover, etc.
  */
 
-import { type Disposable, languages, workspace, extensions, type Uri, window, commands } from 'vscode'
+import { type Disposable, languages, extensions, window, commands } from 'vscode'
 import { type HScopesAPI } from './hscopes'
 // Completion Providers
 import LuaCompletionProvider from './luaCompletion/provider'
@@ -47,22 +47,28 @@ const [
  * Registers all providers for this extension
  * @returns An array of Disposables to be disposed when the extension is deactivated
  */
-export default function registerProviders (): Disposable[] {
+export default function registerProviders(): Disposable[] {
   // Activate the HyperScopes extension
   const hsExt = extensions.getExtension<HScopesAPI>('draivin.hscopes')
   if (hsExt === undefined) throw new Error('HyperScopes Extension not installed')
   // Expose the HyperScopes API to the rest of the providers
-  void hsExt.activate().then((api) => { hs = api })
+  void hsExt.activate().then((api) => {
+    hs = api
+  })
   void xmlCompletionProvider.preload()
   luaCompletionProvider.preload().catch((err: Error) => {
     // If it's a type error it's probably because the API changed
     if (err instanceof TypeError) {
-      void window.showErrorMessage('Failed to preload Lua API, please report this issue to the extension author. Autocompletion disabled')
+      void window.showErrorMessage(
+        'Failed to preload Lua API, please report this issue to the extension author. Autocompletion disabled'
+      )
       throw Error(`Failed to preload Lua API: ${err.message}`)
     }
     throw err
   })
-  commands.registerCommand('ttslua.refresh', () => { ttsElementTreeDataProvider.refresh() })
+  commands.registerCommand('ttslua.refresh', () => {
+    ttsElementTreeDataProvider.refresh()
+  })
   return [
     languages.registerDefinitionProvider('lua', luaDefinitionProvider),
     languages.registerHoverProvider('lua', luaHoverProvider),

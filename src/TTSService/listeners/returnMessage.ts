@@ -4,6 +4,8 @@ import { window } from 'vscode'
 
 export default async (e: ReturnMessage): Promise<void> => {
   if (TTSConsolePanel.currentPanel?.isVisible() ?? false) {
-    await TTSConsolePanel.currentPanel?.append(e.returnValue as string, { classes: ['callout', 'return'] })
+    await TTSConsolePanel.currentPanel?.append(e.returnValue as string, {
+      classes: ['callout', 'return']
+    })
   } else void window.showInformationMessage(e.returnValue as string)
 }

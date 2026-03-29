@@ -15,13 +15,17 @@
  * @returns array of imported modules
  */
 export default function (
-  r: __WebpackModuleApi.RequireContext, skip: (name: string) => boolean = () => true
+  r: __WebpackModuleApi.RequireContext,
+  skip: (name: string) => boolean = () => true
 ): Array<{
-    file: string
-    content: any
-  }> {
-  return r.keys().filter(skip).map((key: string) => ({
-    file: key.replace(/(\.\/|\.ts)/g, ''),
-    content: r(key)
-  }))
+  file: string
+  content: any
+}> {
+  return r
+    .keys()
+    .filter(skip)
+    .map((key: string) => ({
+      file: key.replace(/(\.\/|\.ts)/g, ''),
+      content: r(key)
+    }))
 }

@@ -1,7 +1,9 @@
 import { escape } from 'html-escaper'
-import { text } from 'stream/consumers'
 
-interface StackItem { color: string, loc: number }
+interface StackItem {
+  color: string
+  loc: number
+}
 
 const bbCodes = {
   '\\[b\\](.+?)\\[/b\\]': '<span class="bold">$1</span>',
@@ -63,7 +65,7 @@ const insertColor = (input: string, hexMatch: StackItem): string => {
  * @param input The string to parse
  * @returns The HTML representation of the input
  */
-export default function parse (input: string): string {
+export default function parse(input: string): string {
   // First we direct replace all known BBCode with HTML
   let html = bbCodeParse(escape(input))
   // Then we do color, find all instances of [hexColor] or [-]

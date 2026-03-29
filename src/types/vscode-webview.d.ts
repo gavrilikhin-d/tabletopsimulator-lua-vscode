@@ -38,5 +38,5 @@ declare global {
    *
    * @template StateType Type of the persisted state stored for the webview.
    */
-  function acquireVsCodeApi<StateType = unknown> (): WebviewApi<StateType>
+  function acquireVsCodeApi<StateType = unknown>(): WebviewApi<StateType>
 }

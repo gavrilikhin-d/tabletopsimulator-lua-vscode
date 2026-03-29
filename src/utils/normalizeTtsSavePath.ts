@@ -4,7 +4,7 @@ import { join } from 'path'
 const winDrivePrefix = /^[a-z]:\//i
 const documentsMarker = '/documents/'
 
-export default function normalizeTtsSavePath (inputPath: string): string {
+export default function normalizeTtsSavePath(inputPath: string): string {
   const trimmed = inputPath.trim()
   if (trimmed === '') return trimmed
 

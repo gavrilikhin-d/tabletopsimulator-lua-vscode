@@ -19,9 +19,9 @@ import {
 } from '@vscode/webview-ui-toolkit'
 
 type MessageFromExtension =
-  | { command: 'append', htmlString: string, classes?: string[] }
+  | { command: 'append'; htmlString: string; classes?: string[] }
   | { command: 'clear' }
-  | { command: 'commandState', state: boolean }
+  | { command: 'commandState'; state: boolean }
 
 provideVSCodeDesignSystem().register(vsCodeButton())
 provideVSCodeDesignSystem().register(vsCodeTextField())
@@ -29,7 +29,7 @@ provideVSCodeDesignSystem().register(vsCodeTextField())
 const vscode = acquireVsCodeApi<string>()
 
 window.addEventListener('load', main)
-function main (): void {
+function main(): void {
   const previousState = vscode.getState()
   if (previousState !== undefined) {
     const dataElement: HTMLElement | null = document.getElementById('data')
@@ -44,7 +44,7 @@ const sendCommand = (text: string): void => {
   vscode.postMessage({ type: text.startsWith('>') ? 'command' : 'input', text })
 }
 
-function clearConsole (): void {
+function clearConsole(): void {
   const dataElement: HTMLElement | null = document.getElementById('data')
   if (dataElement !== null) {
     dataElement.textContent = ''

@@ -43,17 +43,18 @@ export interface LuaAPI {
 
 const defaultDownloadedApiPath = 'completion/lua.json'
 
-export async function loadApi (): Promise<LuaAPI> {
+export async function loadApi(): Promise<LuaAPI> {
   try {
     // Attempt to load from local storage
-    const localApi = await LSS.read(defaultDownloadedApiPath).then(async r => JSON.parse(r))
+    const localApi = await LSS.read(defaultDownloadedApiPath).then(async (r) => JSON.parse(r))
     quickStatus(`TTS Lua API Loaded from Local Storage: ${localApi.version}`)
     return localApi
   } catch (err) {
     if ((err as FileSystemError).code !== 'FileNotFound') throw err
     // If it doesn't exist, download it
-    const remoteApi = await fetch(L.urls.luaCompletionApi())
-      .then(async r => await r.json() as LuaAPI)
+    const remoteApi = await fetch(L.urls.luaCompletionApi()).then(
+      async (r) => (await r.json()) as LuaAPI
+    )
     // Check against shipped version
     const extPath = LSS.get<string>('extensionPath')
     if (extPath === undefined) throw new Error('Extension Path not found')

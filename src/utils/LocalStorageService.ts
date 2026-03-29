@@ -16,7 +16,7 @@ let storageUri: Uri | undefined
  * Sets the storage to be used by the service
  * @param newStorage The storage to be used by the service
  */
-export function setStorageRef (KVStorage: Memento, GlobalStorageUri: Uri): void {
+export function setStorageRef(KVStorage: Memento, GlobalStorageUri: Uri): void {
   kvStorage = KVStorage
   storageUri = GlobalStorageUri
   // console.log('Storage Uri: ' + storageUri.fsPath)
@@ -27,7 +27,7 @@ export function setStorageRef (KVStorage: Memento, GlobalStorageUri: Uri): void 
  * @param key Key of element to be found
  * @returns The value of the key, or undefined if it doesn't exist
  */
-export function get<T> (key: string): T | undefined {
+export function get<T>(key: string): T | undefined {
   if (kvStorage == null) throw new Error('Storage not set when trying to get key')
   return kvStorage.get<T>(key)
 }
@@ -38,7 +38,7 @@ export function get<T> (key: string): T | undefined {
  * @param value Value to be set
  * @returns A promise that resolves when the operation is complete
  */
-export async function set<T> (key: string, value: T): Promise<void> {
+export async function set<T>(key: string, value: T): Promise<void> {
   if (kvStorage == null) throw new Error('Storage not set when trying to set key')
   await Promise.resolve(kvStorage.update(key, value))
 }
@@ -49,7 +49,7 @@ export async function set<T> (key: string, value: T): Promise<void> {
  * @param value The value to be upserted
  * @returns The current value of the key after the operation
  */
-export async function upsert<T> (key: string, value: T): Promise<T> {
+export async function upsert<T>(key: string, value: T): Promise<T> {
   if (kvStorage == null) throw new Error('Storage not set when trying to upsert key')
   const currentValue = kvStorage.get<T>(key, value)
   await kvStorage.update(key, currentValue)
@@ -62,7 +62,7 @@ export async function upsert<T> (key: string, value: T): Promise<T> {
  * @param value Value to be set if key is empty
  * @returns The current value of the key, or the value that was set if it was empty
  */
-export function querySet<T> (key: string, value: T): T {
+export function querySet<T>(key: string, value: T): T {
   if (kvStorage == null) throw new Error('Storage not set when trying to query and set key')
   const current = kvStorage.get<T>(key)
   const wasDefined = current !== undefined
@@ -75,7 +75,7 @@ export function querySet<T> (key: string, value: T): T {
  * @param key Key of element to be deleted
  * @returns A promise that resolves when the operation is complete
  */
-export async function clear (key: string): Promise<void> {
+export async function clear(key: string): Promise<void> {
   if (kvStorage == null) throw new Error('Storage not set when trying to clear key')
   await Promise.resolve(kvStorage.update(key, undefined))
 }
@@ -86,7 +86,7 @@ export async function clear (key: string): Promise<void> {
  * @param path Path of file to be written, starting at storageUri
  * @param content Content to be written to file
  */
-export async function write (path: string, content: string): Promise<void> {
+export async function write(path: string, content: string): Promise<void> {
   if (storageUri == null) throw new Error('Storage not set when trying to write file')
   await new FileManager(Uri.joinPath(storageUri, path)).write(content)
 }
@@ -96,7 +96,7 @@ export async function write (path: string, content: string): Promise<void> {
  * @param path Path of file to be read, starting at storageUri
  * @returns The content of the file
  */
-export async function read (path: string): Promise<string> {
+export async function read(path: string): Promise<string> {
   if (storageUri == null) throw new Error('Storage not set when trying to read file')
   return await new FileManager(Uri.joinPath(storageUri, path)).read()
 }
@@ -105,7 +105,7 @@ export async function read (path: string): Promise<string> {
  * Erases a file from extension's storage directory
  * @param path Path of file to be erased, starting at storageUri
  */
-export async function erase (path: string): Promise<void> {
+export async function erase(path: string): Promise<void> {
   if (storageUri == null) throw new Error('Storage not set when trying to erase file')
   await new FileManager(Uri.joinPath(storageUri, path)).erase()
 }

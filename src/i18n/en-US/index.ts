@@ -1,7 +1,8 @@
 import type { BaseTranslation } from '../i18n-types'
 
 const urls = {
-  luaCompletionApi: 'https://raw.githubusercontent.com/Berserk-Games/atom-tabletopsimulator-lua/master/lib/api.json',
+  luaCompletionApi:
+    'https://raw.githubusercontent.com/Berserk-Games/atom-tabletopsimulator-lua/master/lib/api.json',
   versionControl: 'https://tts-vscode.rolandostar.com/guides/versionControl',
   settings: {
     fileManagement: 'https://tts-vscode.rolandostar.com/extension/configuration#file-management'
@@ -23,7 +24,8 @@ const enUS = {
     noGitReposInWorkspace: 'No git repositories found in workspace',
     quickPickPlaceHolder: 'Select working directory to store TTS scripts',
     failedToSelect: 'Failed to select workspace folder, please try again',
-    removed: 'The currently selected working directory is not available in the workspace.\nPlease select a new one or re-add it to the workspace.\n\nDefault working directory will be added when getting scripts. (Ctrl + Alt + L)'
+    removed:
+      'The currently selected working directory is not available in the workspace.\nPlease select a new one or re-add it to the workspace.\n\nDefault working directory will be added when getting scripts. (Ctrl + Alt + L)'
   },
   docs: {
     learnMore: 'Learn More'
@@ -38,7 +40,8 @@ const enUS = {
   // Prompts are special, since promptFactory is used to create functions to call them
   // Check windowManager.ts for more information
   prompts: {
-    getScriptsCanceled: 'Get Lua Scripts from game?\n\nThis will erase any changes that you have made since the last Save & Play.',
+    getScriptsCanceled:
+      'Get Lua Scripts from game?\n\nThis will erase any changes that you have made since the last Save & Play.',
     getScriptsCanceledButton: 'Get Scripts',
     getScriptsTest: 'Test Prompt without button'
   },
@@ -46,7 +49,8 @@ const enUS = {
   errors: {
     goToErrorButton: 'Go to Error',
     serverError: `[${extLabel}] Unexpected Server Error:`,
-    gameNotRunning: 'Unable to connect to Tabletop Simulator.\n\nCheck that the game is running and a save has been loaded.',
+    gameNotRunning:
+      'Unable to connect to Tabletop Simulator.\n\nCheck that the game is running and a save has been loaded.',
     anotherInstanceRunning: 'Another instance of VSCode or Atom is already running',
     anotherInstanceRunningDetail: 'Please close the other instance and try again.',
     uriStatUnexpected: 'Unexpected error while checking if "{0:string}" exists: {1:string}'
